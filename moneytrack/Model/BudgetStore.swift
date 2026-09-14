@@ -71,9 +71,18 @@ final class BudgetStore {
         transactions(for: budget, in: month).reduce(0) { $0 + $1.amount }
     }
 
-    /// cap - spent, may be negative.
+    /// The budget cap in effect for `budget` during `month`: that month's
+    /// own override if one has been set, otherwise the budget's base
+    /// `monthlyBudgetCap`. Self-contained per month — this never mutates
+    /// state, so reading one month never affects another.
+    func budgetCap(_ budget: Budget, in month: DateInterval) -> Decimal {
+        let key = Budget.monthKey(for: month.start)
+        return budget.budgetCapOverrides[key] ?? budget.monthlyBudgetCap
+    }
+
+    /// budgetCap - spent, may be negative.
     func remaining(_ budget: Budget, in month: DateInterval) -> Decimal {
-        budget.monthlyCap - spent(budget, in: month)
+        budgetCap(budget, in: month) - spent(budget, in: month)
     }
 
     func spent(_ group: BudgetGroup, in month: DateInterval) -> Decimal {
@@ -88,8 +97,8 @@ final class BudgetStore {
         transactions(in: month).reduce(0) { $0 + $1.amount }
     }
 
-    func totalPlanned() -> Decimal {
-        budgets.reduce(0) { $0 + $1.monthlyCap }
+    func totalPlanned(in month: DateInterval) -> Decimal {
+        budgets.reduce(0) { $0 + budgetCap($1, in: month) }
     }
 
     func transactionCount(for budget: Budget) -> Int {
@@ -144,16 +153,19 @@ final class BudgetStore {
     // MARK: - Mutations (budgets)
 
     @discardableResult
-    func addBudget(name: String, group: BudgetGroup, cap: Decimal) -> Budget {
-        let budget = Budget(name: name.trimmingCharacters(in: .whitespaces), group: group, monthlyCap: cap)
+    func addBudget(name: String, group: BudgetGroup, budgetCap: Decimal) -> Budget {
+        let budget = Budget(name: name.trimmingCharacters(in: .whitespaces), group: group, monthlyBudgetCap: budgetCap)
         budgets.append(budget)
         scheduleSave()
         return budget
     }
 
-    func setCap(_ budget: Budget, to cap: Decimal) {
+    /// Sets `budget`'s budget cap for `month` only — every other month
+    /// (past or future) keeps whatever value it already resolves to.
+    func setBudgetCap(_ budget: Budget, to budgetCap: Decimal, in month: DateInterval) {
         guard let index = budgets.firstIndex(where: { $0.id == budget.id }) else { return }
-        budgets[index].monthlyCap = cap
+        let key = Budget.monthKey(for: month.start)
+        budgets[index].budgetCapOverrides[key] = budgetCap
         scheduleSave()
     }
 

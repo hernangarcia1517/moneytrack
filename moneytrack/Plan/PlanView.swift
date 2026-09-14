@@ -82,7 +82,7 @@ struct PlanView: View {
         HStack {
             Text("Budgeted this month")
             Spacer()
-            Text(Money.string(store.totalPlanned()))
+            Text(Money.string(store.totalPlanned(in: month)))
                 .monospacedDigit()
         }
         .font(.system(size: Theme.FontSize.s13))

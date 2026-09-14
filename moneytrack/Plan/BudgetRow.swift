@@ -11,8 +11,9 @@ struct BudgetRow: View {
 
     var body: some View {
         let month = store.currentMonth
+        let budgetCap = store.budgetCap(budget, in: month)
         let spent = store.spent(budget, in: month)
-        let isOver = spent > budget.monthlyCap
+        let isOver = spent > budgetCap
 
         VStack(alignment: .leading, spacing: 9) {
             HStack {
@@ -20,19 +21,19 @@ struct BudgetRow: View {
                     .font(.system(size: Theme.FontSize.s15))
                     .foregroundStyle(Theme.Color.rowPrimary)
                 Spacer()
-                Text(Money.ofString(spent: spent, cap: budget.monthlyCap))
+                Text(Money.ofString(spent: spent, budgetCap: budgetCap))
                     .font(.system(size: Theme.FontSize.s13))
                     .foregroundStyle(isOver ? Theme.Color.negative : Theme.Color.textMuted)
                     .monospacedDigit()
             }
 
-            ProgressTrack(fraction: fraction(spent: spent, cap: budget.monthlyCap), isOver: isOver, height: 4)
+            ProgressTrack(fraction: fraction(spent: spent, budgetCap: budgetCap), isOver: isOver, height: 4)
         }
     }
 
-    private func fraction(spent: Decimal, cap: Decimal) -> Double {
-        guard cap > 0 else { return spent > 0 ? 1 : 0 }
-        let value = NSDecimalNumber(decimal: spent / cap).doubleValue
+    private func fraction(spent: Decimal, budgetCap: Decimal) -> Double {
+        guard budgetCap > 0 else { return spent > 0 ? 1 : 0 }
+        let value = NSDecimalNumber(decimal: spent / budgetCap).doubleValue
         return min(max(value, 0), 1)
     }
 }

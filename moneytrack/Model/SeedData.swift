@@ -14,13 +14,13 @@ extension BudgetStore {
             Calendar.gregorian.date(from: DateComponents(year: 2026, month: 3, day: day))!
         }
 
-        let rent = Budget(name: "Rent", group: .bills, monthlyCap: 2000)
-        let electricity = Budget(name: "Electricity", group: .bills, monthlyCap: 100)
-        let sewer = Budget(name: "Sewer", group: .bills, monthlyCap: 100)
-        let studentLoans = Budget(name: "Student loans", group: .bills, monthlyCap: 500)
-        let groceries = Budget(name: "Groceries", group: .needs, monthlyCap: 800)
-        let eatingOut = Budget(name: "Eating out", group: .wants, monthlyCap: 200)
-        let nightsOut = Budget(name: "Nights out", group: .wants, monthlyCap: 200)
+        let rent = Budget(name: "Rent", group: .bills, monthlyBudgetCap: 2000)
+        let electricity = Budget(name: "Electricity", group: .bills, monthlyBudgetCap: 100)
+        let sewer = Budget(name: "Sewer", group: .bills, monthlyBudgetCap: 100)
+        let studentLoans = Budget(name: "Student loans", group: .bills, monthlyBudgetCap: 500)
+        let groceries = Budget(name: "Groceries", group: .needs, monthlyBudgetCap: 800)
+        let eatingOut = Budget(name: "Eating out", group: .wants, monthlyBudgetCap: 200)
+        let nightsOut = Budget(name: "Nights out", group: .wants, monthlyBudgetCap: 200)
 
         let budgets = [rent, electricity, sewer, studentLoans, groceries, eatingOut, nightsOut]
 

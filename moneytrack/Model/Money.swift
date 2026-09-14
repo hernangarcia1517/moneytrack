@@ -33,8 +33,8 @@ enum Money {
     }
 
     /// "$412.00 of $800.00"
-    static func ofString(spent: Decimal, cap: Decimal) -> String {
-        "\(string(spent)) of \(string(cap))"
+    static func ofString(spent: Decimal, budgetCap: Decimal) -> String {
+        "\(string(spent)) of \(string(budgetCap))"
     }
 
     /// Parses keypad/text-field input, accepting only digits and a single decimal point.

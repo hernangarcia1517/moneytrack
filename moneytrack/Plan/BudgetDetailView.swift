@@ -15,13 +15,13 @@ struct BudgetDetailView: View {
     let budget: Budget
     var groupToExpand: Binding<BudgetGroup?> = .constant(nil)
 
-    @State private var capText: String = ""
+    @State private var budgetCapText: String = ""
     @State private var isConfirmingDelete = false
 
     private var month: DateInterval { store.currentMonth }
 
     /// The store is the source of truth; re-read the live copy so edits
-    /// (cap, group) are reflected immediately.
+    /// (budget cap, group) are reflected immediately.
     private var live: Budget { store.budgets.first(where: { $0.id == budget.id }) ?? budget }
 
     var body: some View {
@@ -41,7 +41,7 @@ struct BudgetDetailView: View {
                 ProgressTrack(fraction: fraction, isOver: isOver, height: 6)
                     .padding(.top, Theme.Spacing.s12)
 
-                capField
+                budgetCapField
                     .padding(.top, Theme.Spacing.s26)
 
                 groupChips
@@ -58,7 +58,7 @@ struct BudgetDetailView: View {
         }
         .background(Theme.Color.background)
         .toolbar(.hidden, for: .navigationBar)
-        .onAppear { capText = Self.capString(live.monthlyCap) }
+        .onAppear { budgetCapText = Self.budgetCapString(store.budgetCap(live, in: month)) }
     }
 
     // MARK: - Sections
@@ -103,13 +103,13 @@ struct BudgetDetailView: View {
         }
     }
 
-    private var capField: some View {
+    private var budgetCapField: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Monthly budget")
                 .font(.system(size: Theme.FontSize.s13))
                 .foregroundStyle(Theme.Color.textMuted)
 
-            TextField("", text: $capText)
+            TextField("", text: $budgetCapText)
                 .keyboardType(.decimalPad)
                 .font(.system(size: Theme.FontSize.s15))
                 .foregroundStyle(Theme.Color.text)
@@ -117,11 +117,11 @@ struct BudgetDetailView: View {
                 .padding(.horizontal, Theme.Spacing.s14)
                 .background(Theme.Color.hoverFill)
                 .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.card))
-                .onChange(of: capText) { _, newValue in
+                .onChange(of: budgetCapText) { _, newValue in
                     let filtered = Self.filterDecimalInput(newValue)
-                    if filtered != newValue { capText = filtered }
-                    if let cap = Decimal(string: filtered), cap != live.monthlyCap {
-                        store.setCap(live, to: cap)
+                    if filtered != newValue { budgetCapText = filtered }
+                    if let budgetCap = Decimal(string: filtered), budgetCap != store.budgetCap(live, in: month) {
+                        store.setBudgetCap(live, to: budgetCap, in: month)
                     }
                 }
         }
@@ -207,8 +207,9 @@ struct BudgetDetailView: View {
     private var isOver: Bool { remaining < 0 }
 
     private var fraction: Double {
-        guard live.monthlyCap > 0 else { return spent > 0 ? 1 : 0 }
-        let value = NSDecimalNumber(decimal: spent / live.monthlyCap).doubleValue
+        let budgetCap = store.budgetCap(live, in: month)
+        guard budgetCap > 0 else { return spent > 0 ? 1 : 0 }
+        let value = NSDecimalNumber(decimal: spent / budgetCap).doubleValue
         return min(max(value, 0), 1)
     }
 
@@ -226,7 +227,7 @@ struct BudgetDetailView: View {
         return "\(month) \(day.withOrdinalSuffix)"
     }
 
-    private static func capString(_ amount: Decimal) -> String {
+    private static func budgetCapString(_ amount: Decimal) -> String {
         var value = amount
         var rounded = Decimal()
         NSDecimalRound(&rounded, &value, 2, .plain)

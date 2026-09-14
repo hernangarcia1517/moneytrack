@@ -19,7 +19,7 @@ struct NewBudgetSheet: View {
 
     @State private var name = ""
     @State private var group: BudgetGroup
-    @State private var capText = ""
+    @State private var budgetCapText = ""
 
     init(preselectedGroup: BudgetGroup, onCreate: @escaping (Budget) -> Void = { _ in }) {
         self.preselectedGroup = preselectedGroup
@@ -51,7 +51,7 @@ struct NewBudgetSheet: View {
                     }
                 }
 
-                field(label: "Monthly budget", placeholder: "45", text: $capText, keyboard: .decimalPad)
+                field(label: "Monthly budget", placeholder: "45", text: $budgetCapText, keyboard: .decimalPad)
 
                 Text("Applies from \(monthName) onward. You can change or delete it any time from the budget's page.")
                     .font(.system(size: Theme.FontSize.s12))
@@ -119,8 +119,8 @@ struct NewBudgetSheet: View {
 
     private func add() {
         guard canAdd, !store.isNameTaken(trimmedName) else { return }
-        let cap = Decimal(string: capText) ?? 0
-        let budget = store.addBudget(name: trimmedName, group: group, cap: cap)
+        let budgetCap = Decimal(string: budgetCapText) ?? 0
+        let budget = store.addBudget(name: trimmedName, group: group, budgetCap: budgetCap)
         dismiss()
         onCreate(budget)
     }
