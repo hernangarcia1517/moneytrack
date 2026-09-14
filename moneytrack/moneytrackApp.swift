@@ -9,9 +9,13 @@ import SwiftUI
 
 @main
 struct moneytrackApp: App {
+    @State private var store = BudgetStore()
+
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environment(store)
+                .preferredColorScheme(.dark)
         }
     }
 }
