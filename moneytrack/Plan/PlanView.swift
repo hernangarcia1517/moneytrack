@@ -16,11 +16,13 @@ struct PlanView: View {
 
     @State private var expanded: Set<BudgetGroup> = []
     @State private var newBudgetGroup: BudgetGroup?
+    @State private var openBudgetID: Budget.ID?
+    @State private var path: [Budget] = []
 
     private var month: DateInterval { store.currentMonth }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             ScrollView {
                 VStack(spacing: 0) {
                     MonthHeader()
@@ -34,8 +36,10 @@ struct PlanView: View {
                             GroupSection(
                                 group: group,
                                 isExpanded: expanded.contains(group),
+                                openBudgetID: $openBudgetID,
                                 onToggle: { toggle(group) },
-                                onAddBudget: { newBudgetGroup = group }
+                                onAddBudget: { newBudgetGroup = group },
+                                onSelectBudget: { path.append($0) }
                             )
                         }
                     }

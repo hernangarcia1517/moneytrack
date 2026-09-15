@@ -13,6 +13,8 @@ struct SpendingView: View {
     /// PlanView uses for `groupToExpand`.
     @Binding var transactionToEdit: Transaction?
 
+    @State private var openTransactionID: Transaction.ID?
+
     private var month: DateInterval { store.currentMonth }
 
     var body: some View {
@@ -106,9 +108,12 @@ struct SpendingView: View {
     }
 
     private func transactionRow(_ transaction: Transaction) -> some View {
-        Button {
-            transactionToEdit = transaction
-        } label: {
+        SwipeToDeleteRow(
+            id: transaction.id,
+            openID: $openTransactionID,
+            onTap: { transactionToEdit = transaction },
+            onDelete: { store.delete(transaction) }
+        ) {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(transaction.merchant)
@@ -127,9 +132,7 @@ struct SpendingView: View {
                     .monospacedDigit()
             }
             .padding(.vertical, 9)
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
     }
 
     private static func dayHeaderLabel(_ date: Date) -> String {

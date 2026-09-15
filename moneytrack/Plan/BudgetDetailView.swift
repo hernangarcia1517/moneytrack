@@ -16,7 +16,6 @@ struct BudgetDetailView: View {
     var groupToExpand: Binding<BudgetGroup?> = .constant(nil)
 
     @State private var budgetCapText: String = ""
-    @State private var isConfirmingDelete = false
 
     private var month: DateInterval { store.currentMonth }
 
@@ -182,22 +181,22 @@ struct BudgetDetailView: View {
         }
     }
 
+    // No confirmation before deleting — matches the swipe-to-delete gesture
+    // on Plan/the Monthly budgets screen, which fires the same
+    // `deleteBudget` immediately. A deliberate product decision for this
+    // design pass (may be revisited later); having this button require a
+    // confirmation while swiping doesn't would just be an inconsistent way
+    // to bypass it.
     private var deleteButton: some View {
         Button {
-            isConfirmingDelete = true
+            store.deleteBudget(live)
+            dismiss()
         } label: {
             Text(deleteLabel)
                 .font(.system(size: Theme.FontSize.s13))
                 .foregroundStyle(Theme.Color.negative)
         }
         .buttonStyle(.plain)
-        .confirmationDialog(deleteLabel, isPresented: $isConfirmingDelete, titleVisibility: .visible) {
-            Button(deleteLabel, role: .destructive) {
-                store.deleteBudget(live)
-                dismiss()
-            }
-            Button("Cancel", role: .cancel) {}
-        }
     }
 
     // MARK: - Derived

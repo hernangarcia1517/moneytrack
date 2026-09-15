@@ -30,6 +30,7 @@ enum Theme {
         static let accentDeep = SwiftUI.Color(hex: 0x4B4380)       // progress dot done
 
         static let negative = SwiftUI.Color(hex: 0xE5707E)         // negative / overspent
+        static let negativeText = SwiftUI.Color(hex: 0x241416)     // text on the negative fill (e.g. swipe-to-delete)
 
         // Additional resolved values called out on individual screens in the
         // handoff (not in the core token table, but given exact hex values).

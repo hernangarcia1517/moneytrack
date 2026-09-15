@@ -13,8 +13,10 @@ struct GroupSection: View {
 
     let group: BudgetGroup
     let isExpanded: Bool
+    @Binding var openBudgetID: Budget.ID?
     var onToggle: () -> Void
     var onAddBudget: () -> Void
+    var onSelectBudget: (Budget) -> Void
 
     private var month: DateInterval { store.currentMonth }
 
@@ -25,12 +27,17 @@ struct GroupSection: View {
             if isExpanded {
                 VStack(spacing: 0) {
                     ForEach(store.budgets(in: group)) { budget in
-                        NavigationLink(value: budget) {
+                        SwipeToDeleteRow(
+                            id: budget.id,
+                            openID: $openBudgetID,
+                            cornerRadius: Theme.Radius.row,
+                            onTap: { onSelectBudget(budget) },
+                            onDelete: { store.deleteBudget(budget) }
+                        ) {
                             BudgetRow(budget: budget)
                                 .padding(.vertical, 11)
                                 .padding(.horizontal, 12)
                         }
-                        .buttonStyle(PlanRowButtonStyle())
                     }
                     addBudgetFooter
                 }
@@ -85,15 +92,5 @@ struct GroupSection: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .buttonStyle(.plain)
-    }
-}
-
-/// Transparent by default, filling with the design system's hover tint while
-/// pressed — iOS has no hover state, so a press stands in for it.
-struct PlanRowButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .background(configuration.isPressed ? Theme.Color.hoverFill : .clear)
-            .cornerRadius(Theme.Radius.row)
     }
 }
