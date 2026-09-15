@@ -3,7 +3,18 @@
 //  moneytrack
 //
 //  Presented full-screen (not a sheet — an explicit design change) from the
-//  centre "+" button. Nothing is written to the store until Save on step 4.
+//  centre "+" button, or in edit mode from tapping a transaction row on
+//  Spending. Nothing is written to the store until Save/"Save changes" on
+//  the Review step.
+//
+//  New vs. edit mode differ in a few ways (mirrors the design prototype):
+//  - New starts on step 0 (Amount) and walks 0->1->2->3 linearly.
+//  - Edit starts directly on step 3 (Review); jumping to an earlier step
+//    from a Review row is a single-field mini-editor — "Next" there just
+//    returns to Review ("Done"), it doesn't advance the whole flow.
+//  - The header title is "Edit transaction" in edit mode (except on the
+//    "When?" date step, which always uses its own title), and the 4-dot
+//    progress indicator only shows for the new-transaction flow.
 //
 
 import SwiftUI
@@ -12,19 +23,46 @@ struct AddTransactionView: View {
     @Environment(BudgetStore.self) private var store
     @Environment(\.dismiss) private var dismiss
 
+    /// nil = adding a new transaction; set = editing this existing one.
+    let editingTransaction: Transaction?
+
     /// Called after the transaction is saved, with the budget it landed in,
     /// so the caller can auto-expand that group on Plan.
     var onSaved: (Budget.ID) -> Void
 
-    @State private var step = 0
-    @State private var amountString = ""
-    @State private var merchant = ""
+    @State private var step: Int
+    @State private var amountString: String
+    @State private var merchant: String
     @State private var selectedBudgetID: Budget.ID?
-    @State private var note = ""
+    @State private var note: String
+    @State private var selectedDay: Int
     @State private var isAddingBudget = false
 
     private static let titles = ["Amount", "Where", "Budget", "Review"]
 
+    init(editing transaction: Transaction? = nil, onSaved: @escaping (Budget.ID) -> Void) {
+        self.editingTransaction = transaction
+        self.onSaved = onSaved
+        if let transaction {
+            _step = State(initialValue: 3)
+            _amountString = State(initialValue: Self.inputString(for: transaction.amount))
+            _merchant = State(initialValue: transaction.merchant)
+            _selectedBudgetID = State(initialValue: transaction.budgetID)
+            _note = State(initialValue: transaction.note)
+            _selectedDay = State(initialValue: Calendar.gregorian.component(.day, from: transaction.date))
+        } else {
+            _step = State(initialValue: 0)
+            _amountString = State(initialValue: "")
+            _merchant = State(initialValue: "")
+            _selectedBudgetID = State(initialValue: nil)
+            _note = State(initialValue: "")
+            // Corrected in .onAppear to store.elapsedDayOfMonth — the store
+            // isn't available yet inside init().
+            _selectedDay = State(initialValue: 1)
+        }
+    }
+
+    private var isEditing: Bool { editingTransaction != nil }
     private var amount: Decimal { Decimal(string: amountString) ?? 0 }
     private var selectedBudget: Budget? { store.budget(for: selectedBudgetID) }
 
@@ -50,6 +88,11 @@ struct AddTransactionView: View {
                 step = 3
             }
         }
+        .onAppear {
+            if !isEditing {
+                selectedDay = store.elapsedDayOfMonth
+            }
+        }
     }
 
     // MARK: - Header
@@ -61,24 +104,37 @@ struct AddTransactionView: View {
 
             Spacer()
 
-            Text(Self.titles[step])
+            Text(headerTitle)
                 .font(.system(size: Theme.FontSize.s15, weight: .medium))
                 .foregroundStyle(Theme.Color.text)
 
             Spacer()
 
             HStack(spacing: 5) {
-                ForEach(0..<4, id: \.self) { i in
-                    Circle()
-                        .fill(dotColor(for: i))
-                        .frame(width: 5, height: 5)
+                if showsProgressDots {
+                    ForEach(0..<4, id: \.self) { i in
+                        Circle()
+                            .fill(dotColor(for: i))
+                            .frame(width: 5, height: 5)
+                    }
                 }
             }
+            .frame(minWidth: 35, alignment: .trailing)
         }
         .font(.system(size: Theme.FontSize.s15))
         .padding(.horizontal, Theme.Spacing.gutter)
         .padding(.top, Theme.Spacing.s14)
         .padding(.bottom, Theme.Spacing.s10)
+    }
+
+    private var headerTitle: String {
+        if step == 4 { return "When?" }
+        if isEditing { return "Edit transaction" }
+        return Self.titles[step]
+    }
+
+    private var showsProgressDots: Bool {
+        !isEditing && step < 4
     }
 
     private func dotColor(for index: Int) -> Color {
@@ -95,7 +151,8 @@ struct AddTransactionView: View {
         case 0: amountStep
         case 1: whereStep
         case 2: budgetStep
-        default: reviewStep
+        case 3: reviewStep
+        default: whenStep
         }
     }
 
@@ -250,12 +307,12 @@ struct AddTransactionView: View {
     private var reviewStep: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.Spacing.s20) {
-                VStack(alignment: .leading, spacing: Theme.Spacing.s10) {
-                    reviewRow(label: "Amount", value: Money.string(amount))
-                    reviewRow(label: "Where", value: displayedMerchant)
-                    reviewRow(label: "Budget", value: selectedBudget?.name ?? "")
+                VStack(spacing: 0) {
+                    reviewJumpRow(label: "Amount", value: Money.string(amount)) { step = 0 }
+                    reviewJumpRow(label: "Where", value: displayedMerchant) { step = 1 }
+                    reviewJumpRow(label: "Budget", value: selectedBudget?.name ?? "") { step = 2 }
+                    reviewJumpRow(label: "When", value: dayLabel(for: selectedDay), isLast: true) { step = 4 }
                 }
-                .padding(Theme.Spacing.s16)
                 .overlay(RoundedRectangle(cornerRadius: Theme.Radius.card).strokeBorder(Theme.Color.border, lineWidth: 1))
 
                 VStack(alignment: .leading, spacing: 8) {
@@ -276,10 +333,50 @@ struct AddTransactionView: View {
                         .font(.system(size: Theme.FontSize.s13))
                         .foregroundStyle(consequenceOverspends(for: budget) ? Theme.Color.negative : Theme.Color.textSecondary)
                 }
+
+                if isEditing {
+                    Button {
+                        deleteEditingTransaction()
+                    } label: {
+                        Text("Delete transaction")
+                            .font(.system(size: Theme.FontSize.s13))
+                            .foregroundStyle(Theme.Color.negative)
+                    }
+                    .buttonStyle(.plain)
+                }
             }
             .padding(.horizontal, Theme.Spacing.gutter)
             .padding(.top, Theme.Spacing.s20)
         }
+    }
+
+    private func reviewJumpRow(label: String, value: String, isLast: Bool = false, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Text(label)
+                    .font(.system(size: Theme.FontSize.s13))
+                    .foregroundStyle(Theme.Color.textMuted)
+                Spacer()
+                Text(value)
+                    .font(.system(size: Theme.FontSize.s15))
+                    .foregroundStyle(Theme.Color.text)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(Theme.Color.textFaint)
+            }
+            .padding(.vertical, Theme.Spacing.s14)
+            .padding(.horizontal, Theme.Spacing.s16)
+            .contentShape(Rectangle())
+            .overlay(alignment: .bottom) {
+                if !isLast {
+                    Rectangle().fill(Theme.Color.hairline).frame(height: 1)
+                }
+            }
+        }
+        .buttonStyle(.plain)
     }
 
     private var displayedMerchant: String {
@@ -287,20 +384,9 @@ struct AddTransactionView: View {
         return trimmed.isEmpty ? (selectedBudget?.name ?? "") : trimmed
     }
 
-    private func reviewRow(label: String, value: String) -> some View {
-        HStack {
-            Text(label)
-                .foregroundStyle(Theme.Color.textMuted)
-            Spacer()
-            Text(value)
-                .foregroundStyle(Theme.Color.text)
-                .monospacedDigit()
-        }
-        .font(.system(size: Theme.FontSize.s15))
-    }
-
     private func remainingAfter(_ budget: Budget) -> Decimal {
-        store.remaining(budget, in: store.currentMonth) - amount
+        let alreadyCounted = editingTransaction?.budgetID == budget.id ? (editingTransaction?.amount ?? 0) : 0
+        return store.remaining(budget, in: store.currentMonth) + alreadyCounted - amount
     }
 
     private func consequenceOverspends(for budget: Budget) -> Bool {
@@ -316,6 +402,67 @@ struct AddTransactionView: View {
         }
     }
 
+    private func deleteEditingTransaction() {
+        guard let editingTransaction else { return }
+        store.delete(editingTransaction)
+        dismiss()
+    }
+
+    // Step 5 — When (date, within the viewed month)
+    private var whenStep: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: Theme.Spacing.s14) {
+                Text(monthYearLabel)
+                    .font(.system(size: Theme.FontSize.s13))
+                    .foregroundStyle(Theme.Color.textMuted)
+
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: Theme.Spacing.s6), count: 7), spacing: Theme.Spacing.s6) {
+                    ForEach(1...daysInMonth, id: \.self) { day in
+                        Button {
+                            selectedDay = day
+                            step = 3
+                        } label: {
+                            Text("\(day)")
+                                .font(.system(size: Theme.FontSize.s14))
+                                .monospacedDigit()
+                                .foregroundStyle(day == selectedDay ? Theme.Color.accentText : Theme.Color.textSecondary)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 44)
+                                .background(day == selectedDay ? Theme.Color.accentTint : Theme.Color.hoverFill)
+                                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.row))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .padding(.horizontal, Theme.Spacing.gutter)
+            .padding(.top, Theme.Spacing.s20)
+        }
+    }
+
+    private var daysInMonth: Int {
+        Calendar.gregorian.range(of: .day, in: .month, for: store.currentMonth.start)?.count ?? 30
+    }
+
+    private var monthYearLabel: String {
+        let formatter = DateFormatter()
+        formatter.calendar = .gregorian
+        formatter.dateFormat = "LLLL yyyy"
+        return formatter.string(from: store.currentMonth.start)
+    }
+
+    private func dayLabel(for day: Int) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = .gregorian
+        formatter.dateFormat = "LLLL"
+        let monthName = formatter.string(from: store.currentMonth.start)
+        return "\(monthName) \(day.withOrdinalSuffix)"
+    }
+
+    private func date(forDay day: Int) -> Date {
+        Calendar.gregorian.date(byAdding: .day, value: day - 1, to: store.currentMonth.start) ?? store.currentMonth.start
+    }
+
     // MARK: - Action bar
 
     private var actionBar: some View {
@@ -323,7 +470,7 @@ struct AddTransactionView: View {
             Rectangle().fill(Theme.Color.hairline).frame(height: 1)
             GeometryReader { geo in
                 HStack(spacing: 10) {
-                    if step > 0 {
+                    if canGoBack {
                         Button {
                             step -= 1
                         } label: {
@@ -337,7 +484,7 @@ struct AddTransactionView: View {
                     }
 
                     Button(action: primaryAction) {
-                        Text(step == 3 ? "Save" : "Next")
+                        Text(primaryLabel)
                             .font(.system(size: Theme.FontSize.s15))
                             .foregroundStyle(isStepSatisfied ? Theme.Color.accent : Theme.Color.disabledInk)
                     }
@@ -357,26 +504,62 @@ struct AddTransactionView: View {
         }
     }
 
+    /// Back only shows on the "When" step (step 4, both flows) or on steps
+    /// 1-3 of the new-transaction flow. In edit mode, jumping from Review to
+    /// an earlier field (steps 0-2) is a single-field mini-editor — "Done"
+    /// (the primary button) returns to Review, there's no separate Back.
+    private var canGoBack: Bool {
+        step == 4 || (!isEditing && step > 0)
+    }
+
+    private var primaryLabel: String {
+        if step == 4 { return "Done" }
+        if isEditing { return step == 3 ? "Save changes" : "Done" }
+        return step == 3 ? "Save" : "Next"
+    }
+
     private func primaryAction() {
         guard isStepSatisfied else { return }
-        if step < 3 {
-            step += 1
-        } else {
-            save()
+        if step == 4 {
+            step = 3
+            return
         }
+        if isEditing {
+            if step == 3 { save() } else { step = 3 }
+            return
+        }
+        if step == 3 { save() } else { step += 1 }
     }
 
     private func save() {
         guard let budgetID = selectedBudgetID else { return }
-        let transaction = Transaction(
-            date: BudgetStore.referenceDate,
-            merchant: displayedMerchant,
-            budgetID: budgetID,
-            amount: amount,
-            note: note
-        )
-        store.add(transaction)
+        let date = date(forDay: selectedDay)
+        if let editingTransaction {
+            store.update(Transaction(
+                id: editingTransaction.id,
+                date: date,
+                merchant: displayedMerchant,
+                budgetID: budgetID,
+                amount: amount,
+                note: note
+            ))
+        } else {
+            store.add(Transaction(
+                date: date,
+                merchant: displayedMerchant,
+                budgetID: budgetID,
+                amount: amount,
+                note: note
+            ))
+        }
         onSaved(budgetID)
+    }
+
+    private static func inputString(for amount: Decimal) -> String {
+        var value = amount
+        var rounded = Decimal()
+        NSDecimalRound(&rounded, &value, 2, .plain)
+        return NSDecimalNumber(decimal: rounded).stringValue
     }
 }
 

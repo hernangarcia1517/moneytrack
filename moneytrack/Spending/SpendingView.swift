@@ -8,6 +8,11 @@ import SwiftUI
 struct SpendingView: View {
     @Environment(BudgetStore.self) private var store
 
+    /// Set by tapping a transaction row; ContentView observes this and
+    /// presents AddTransactionView in edit mode — same cross-view pattern
+    /// PlanView uses for `groupToExpand`.
+    @Binding var transactionToEdit: Transaction?
+
     private var month: DateInterval { store.currentMonth }
 
     var body: some View {
@@ -101,24 +106,30 @@ struct SpendingView: View {
     }
 
     private func transactionRow(_ transaction: Transaction) -> some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(transaction.merchant)
+        Button {
+            transactionToEdit = transaction
+        } label: {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(transaction.merchant)
+                        .font(.system(size: Theme.FontSize.s15))
+                        .foregroundStyle(Theme.Color.emphasis)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    Text(store.budget(for: transaction.budgetID)?.name ?? "")
+                        .font(.system(size: Theme.FontSize.s12))
+                        .foregroundStyle(Theme.Color.textFaint)
+                }
+                Spacer(minLength: Theme.Spacing.s12)
+                Text(Money.string(transaction.amount))
                     .font(.system(size: Theme.FontSize.s15))
-                    .foregroundStyle(Theme.Color.emphasis)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                Text(store.budget(for: transaction.budgetID)?.name ?? "")
-                    .font(.system(size: Theme.FontSize.s12))
-                    .foregroundStyle(Theme.Color.textFaint)
+                    .foregroundStyle(Theme.Color.text)
+                    .monospacedDigit()
             }
-            Spacer(minLength: Theme.Spacing.s12)
-            Text(Money.string(transaction.amount))
-                .font(.system(size: Theme.FontSize.s15))
-                .foregroundStyle(Theme.Color.text)
-                .monospacedDigit()
+            .padding(.vertical, 9)
+            .contentShape(Rectangle())
         }
-        .padding(.vertical, 9)
+        .buttonStyle(.plain)
     }
 
     private static func dayHeaderLabel(_ date: Date) -> String {

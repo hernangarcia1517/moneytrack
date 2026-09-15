@@ -18,6 +18,7 @@ struct ContentView: View {
     @State private var selectedTab: AppTab = .plan
     @State private var isAddingTransaction = false
     @State private var groupToExpand: BudgetGroup?
+    @State private var transactionToEdit: Transaction?
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -28,7 +29,7 @@ struct ContentView: View {
                 case .plan:
                     PlanView(groupToExpand: $groupToExpand)
                 case .spending:
-                    SpendingView()
+                    SpendingView(transactionToEdit: $transactionToEdit)
                 }
             }
             .padding(.bottom, 83)
@@ -41,6 +42,15 @@ struct ContentView: View {
         .fullScreenCover(isPresented: $isAddingTransaction) {
             AddTransactionView { budgetID in
                 isAddingTransaction = false
+                selectedTab = .plan
+                if let group = store.budget(for: budgetID)?.group {
+                    groupToExpand = group
+                }
+            }
+        }
+        .fullScreenCover(item: $transactionToEdit) { transaction in
+            AddTransactionView(editing: transaction) { budgetID in
+                transactionToEdit = nil
                 selectedTab = .plan
                 if let group = store.budget(for: budgetID)?.group {
                     groupToExpand = group
