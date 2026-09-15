@@ -14,6 +14,7 @@ struct SpendingView: View {
     @Binding var transactionToEdit: Transaction?
 
     @State private var openTransactionID: Transaction.ID?
+    @State private var scrubbedDay: Int?
 
     private var month: DateInterval { store.currentMonth }
 
@@ -23,12 +24,18 @@ struct SpendingView: View {
                 VStack(spacing: 0) {
                     MonthHeader()
 
-                    VStack(alignment: .leading, spacing: Theme.Spacing.s16) {
-                        Text("Daily spend")
-                            .font(.system(size: Theme.FontSize.s13))
-                            .foregroundStyle(Theme.Color.textMuted)
+                    VStack(alignment: .leading, spacing: 0) {
+                        chartHeadline
+                            .padding(.top, Theme.Spacing.s14)
+                            .padding(.bottom, Theme.Spacing.s18)
 
-                        DailyBars(dailyTotals: dailyTotals)
+                        DailyBars(
+                            dailyTotals: dailyTotals,
+                            elapsedDayOfMonth: min(store.elapsedDayOfMonth, daysInMonth),
+                            axisStartLabel: axisLabel(forDay: 1),
+                            axisEndLabel: axisLabel(forDay: daysInMonth),
+                            scrubbedDay: $scrubbedDay
+                        )
                     }
                     .padding(.horizontal, Theme.Spacing.gutter)
                     .padding(.bottom, Theme.Spacing.s16)
@@ -56,16 +63,88 @@ struct SpendingView: View {
         }
     }
 
+    // MARK: - Chart headline
+
+    /// 13pt label above the headline figure: "Day-to-day in March", or the
+    /// scrubbed day's date while dragging over the chart.
+    private var chartHeadline: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(scrubLabel)
+                .font(.system(size: Theme.FontSize.s13))
+                .foregroundStyle(Theme.Color.neutral400)
+            Text(Money.string(scrubbedDay != nil ? scrubbedDayTotal : dayToDayTotal))
+                .font(.system(size: Theme.FontSize.s32, weight: .medium))
+                .tracking(Theme.FontSize.s32 * -0.025)
+                .foregroundStyle(Theme.Color.neutral100)
+                .monospacedDigit()
+            Text(scrubNote)
+                .font(.system(size: Theme.FontSize.s11))
+                .foregroundStyle(Theme.Color.neutral600)
+        }
+    }
+
+    private var scrubLabel: String {
+        guard let scrubbedDay else { return "Day-to-day in \(monthName)" }
+        return "\(monthName) \(scrubbedDay.withOrdinalSuffix)"
+    }
+
+    /// Bills are excluded from the day-to-day figure (fixed, not a "how am
+    /// I spending day to day" signal) — the note makes that explicit, and
+    /// includes the true month total (incl. Bills) only in the resting
+    /// (non-scrubbed) state, matching the design.
+    private var scrubNote: String {
+        guard scrubbedDay == nil else { return "Excludes fixed bills" }
+        return "Excludes fixed bills · \(Money.string(store.totalSpent(in: month))) spent in all"
+    }
+
+    private var monthName: String {
+        let formatter = DateFormatter()
+        formatter.calendar = .gregorian
+        formatter.dateFormat = "LLLL"
+        return formatter.string(from: month.start)
+    }
+
+    private func axisLabel(forDay day: Int) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = .gregorian
+        formatter.dateFormat = "MMM"
+        let monthAbbrev = formatter.string(from: month.start)
+        return "\(monthAbbrev) \(day)"
+    }
+
     // MARK: - Chart data
 
+    private var daysInMonth: Int {
+        Calendar.gregorian.range(of: .day, in: .month, for: month.start)?.count ?? 30
+    }
+
+    /// The day-to-day chart excludes Bills-group spend entirely — fixed
+    /// bills would otherwise dominate the scale and obscure the
+    /// discretionary day-to-day pattern the chart exists to show.
+    private var nonBillsTransactions: [Transaction] {
+        store.transactions(in: month).filter { store.budget(for: $0.budgetID)?.group != .bills }
+    }
+
+    /// One entry per day of the month (not just elapsed days — later days
+    /// render as dim "future" stubs in DailyBars).
     private var dailyTotals: [Decimal] {
+        var totals = [Decimal](repeating: 0, count: daysInMonth)
         let calendar = Calendar.gregorian
-        let transactions = store.transactions(in: month)
-        return (1...store.elapsedDayOfMonth).map { day in
-            transactions
-                .filter { calendar.component(.day, from: $0.date) == day }
-                .reduce(0) { $0 + $1.amount }
+        for transaction in nonBillsTransactions {
+            let day = calendar.component(.day, from: transaction.date)
+            guard day >= 1, day <= totals.count else { continue }
+            totals[day - 1] += transaction.amount
         }
+        return totals
+    }
+
+    private var dayToDayTotal: Decimal {
+        nonBillsTransactions.reduce(0) { $0 + $1.amount }
+    }
+
+    private var scrubbedDayTotal: Decimal {
+        guard let scrubbedDay, scrubbedDay >= 1, scrubbedDay <= dailyTotals.count else { return 0 }
+        return dailyTotals[scrubbedDay - 1]
     }
 
     // MARK: - Transaction list

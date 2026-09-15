@@ -37,6 +37,24 @@ enum Theme {
         static let rowPrimary = SwiftUI.Color(hex: 0xD9DAE1)        // budget row name
         static let emphasis = SwiftUI.Color(hex: 0xEFEFF2)          // spending merchant name
         static let accentTextOnFill = SwiftUI.Color(hex: 0xEDEBF8)  // selected chip text
+
+        // The numbered neutral/accent ramp from the Nocturne design system
+        // (`--color-neutral-*` / `--color-accent-*` in the V2 design
+        // source's own stylesheet, resolved from
+        // `_ds/nocturne-.../styles.css` in the design bundle — NOT the hex
+        // values in that bundle's outer editor-chrome markup, which is an
+        // unrelated blue palette for the design tool itself, not the app).
+        // Newer (V2 design pass) screens pull arbitrary steps from this
+        // ramp rather than a small set of pre-named roles; add more of the
+        // ramp here as later phases need it rather than reusing an
+        // unrelated older semantic token that merely looks close.
+        static let neutral100 = SwiftUI.Color(hex: 0xF3F5FE)
+        static let neutral400 = SwiftUI.Color(hex: 0xB2B6CA)
+        static let neutral600 = SwiftUI.Color(hex: 0x75798C)
+        static let neutral700 = SwiftUI.Color(hex: 0x595D6C)
+        static let neutral800 = SwiftUI.Color(hex: 0x3F424D)
+        static let accent200 = SwiftUI.Color(hex: 0xE7E5FE)
+        static let accent700 = SwiftUI.Color(hex: 0x5D5294)
     }
 
     enum Spacing {
@@ -64,6 +82,7 @@ enum Theme {
 
     enum FontSize {
         static let s52: CGFloat = 52   // headline
+        static let s32: CGFloat = 32   // Spending scrub headline
         static let s48: CGFloat = 48   // amount entry
         static let s26: CGFloat = 26   // budget detail title
         static let s22: CGFloat = 22   // stat values
