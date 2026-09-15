@@ -19,10 +19,23 @@ final class BudgetStore {
     var budgets: [Budget]
     var transactions: [Transaction]
 
+    /// The month currently being viewed — starts on `referenceDate`'s month
+    /// and is user-navigable via the month picker (`MonthPickerSheet`).
+    /// Always normalized to the first instant of its month.
+    private(set) var viewedMonth: Date
+
+    /// Whether the user has already dismissed the "you're changing a
+    /// closed/future month" confirmation for `viewedMonth` this session —
+    /// resets whenever `viewedMonth` changes. Matches the design prototype:
+    /// only saving/editing a transaction is gated by this, not cap edits or
+    /// budget creation.
+    private(set) var hasConfirmedOffMonthEdit = false
+
     @ObservationIgnored private let persistence = BudgetStorePersistence()
     @ObservationIgnored private var saveTask: Task<Void, Never>?
 
     init() {
+        viewedMonth = Calendar.gregorian.dateInterval(of: .month, for: BudgetStore.referenceDate)!.start
         if let loaded = persistence.load() {
             budgets = loaded.budgets
             transactions = loaded.transactions
@@ -35,22 +48,60 @@ final class BudgetStore {
 
     // MARK: - Month
 
-    /// There is no month picker yet (explicitly not designed), and the
-    /// mock data is anchored to March 2026, so "the current month" is
-    /// pinned there for now rather than read from the device clock.
-    /// Swap this for a real, user-navigable month once that screen exists.
+    /// The app's fixed "today" — not the device clock. The mock data is
+    /// anchored to March 2026, and the design itself (including the V2
+    /// prototype's own internal state) treats "today" as this fixed
+    /// simulated date rather than `Date()`, so month navigation moving away
+    /// from and back to it stays meaningful without the seed data ever
+    /// looking stale relative to a real, ever-advancing clock.
     static let referenceDate: Date = {
         Calendar.gregorian.date(from: DateComponents(year: 2026, month: 3, day: 16))!
     }()
 
     var currentMonth: DateInterval {
+        Calendar.gregorian.dateInterval(of: .month, for: viewedMonth)!
+    }
+
+    private var todayMonth: DateInterval {
         Calendar.gregorian.dateInterval(of: .month, for: BudgetStore.referenceDate)!
     }
 
-    /// Elapsed days shown by the Spending daily chart: 1...16 for the
-    /// pinned reference date.
+    var isViewingCurrentMonth: Bool { currentMonth.start == todayMonth.start }
+    var isViewingPastMonth: Bool { currentMonth.start < todayMonth.start }
+    var isViewingFutureMonth: Bool { currentMonth.start > todayMonth.start }
+
+    /// For the Spending chart's "future day" styling: the real elapsed day
+    /// number when viewing the actual current month, every day of the
+    /// month when viewing a past month (none of it is "future" anymore), or
+    /// zero when viewing a future month (none of it has happened yet).
     var elapsedDayOfMonth: Int {
-        Calendar.gregorian.component(.day, from: BudgetStore.referenceDate)
+        if isViewingPastMonth {
+            return Calendar.gregorian.range(of: .day, in: .month, for: viewedMonth)?.count ?? 30
+        } else if isViewingFutureMonth {
+            return 0
+        } else {
+            return Calendar.gregorian.component(.day, from: BudgetStore.referenceDate)
+        }
+    }
+
+    /// Day pre-filled when opening Add for a new transaction: real "today"
+    /// only while viewing the actual current month, otherwise the 1st —
+    /// there's no meaningful "today" inside a month you're not currently in.
+    var defaultTransactionDay: Int {
+        isViewingCurrentMonth ? Calendar.gregorian.component(.day, from: BudgetStore.referenceDate) : 1
+    }
+
+    func setViewedMonth(_ date: Date) {
+        viewedMonth = Calendar.gregorian.dateInterval(of: .month, for: date)!.start
+        hasConfirmedOffMonthEdit = false
+    }
+
+    func goToToday() {
+        setViewedMonth(BudgetStore.referenceDate)
+    }
+
+    func confirmOffMonthEdit() {
+        hasConfirmedOffMonthEdit = true
     }
 
     // MARK: - Derived (budgets)

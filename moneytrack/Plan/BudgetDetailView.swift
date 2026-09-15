@@ -123,7 +123,18 @@ struct BudgetDetailView: View {
                         store.setBudgetCap(live, to: budgetCap, in: month)
                     }
                 }
+
+            Text("Applies to \(monthName) only. Every other month keeps its own.")
+                .font(.system(size: Theme.FontSize.s12))
+                .foregroundStyle(Theme.Color.neutral500)
         }
+    }
+
+    private var monthName: String {
+        let formatter = DateFormatter()
+        formatter.calendar = .gregorian
+        formatter.dateFormat = "LLLL yyyy"
+        return formatter.string(from: month.start)
     }
 
     private var groupChips: some View {

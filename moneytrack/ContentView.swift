@@ -116,33 +116,60 @@ struct ContentView: View {
 
 extension AppTab: Equatable {}
 
-/// The month header shared by the Plan and Spending screen roots: the
-/// (currently inert) month label and "through the Nth" marker. It lives at
-/// the top of each tab's own NavigationStack so it disappears, as intended,
-/// when a screen is pushed on top (e.g. BudgetDetailView).
+/// The month header shared by the Plan and Spending screen roots: the month
+/// label (tap to open the month picker) and a "through the Nth" /
+/// "complete" / "not started" marker, plus a "Today" pill when viewing a
+/// month other than the current one. It lives at the top of each tab's own
+/// NavigationStack so it disappears, as intended, when a screen is pushed
+/// on top (e.g. BudgetDetailView).
 struct MonthHeader: View {
     @Environment(BudgetStore.self) private var store
+    @State private var showingPicker = false
 
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
-            HStack(spacing: 4) {
-                Text(monthLabel)
-                    .font(.system(size: Theme.FontSize.s17, weight: .medium))
-                    .foregroundStyle(Theme.Color.text)
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Theme.Color.text)
-                    .frame(width: 11, height: 7)
+            Button {
+                showingPicker = true
+            } label: {
+                HStack(spacing: 4) {
+                    Text(monthLabel)
+                        .font(.system(size: Theme.FontSize.s17, weight: .medium))
+                        .foregroundStyle(Theme.Color.text)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Theme.Color.text)
+                        .frame(width: 11, height: 7)
+                }
             }
+            .buttonStyle(.plain)
 
             Spacer()
 
-            Text(throughLabel)
-                .font(.system(size: Theme.FontSize.s12))
-                .foregroundStyle(Theme.Color.textMuted)
+            HStack(spacing: 10) {
+                Text(throughLabel)
+                    .font(.system(size: Theme.FontSize.s12))
+                    .foregroundStyle(Theme.Color.textMuted)
+
+                if !store.isViewingCurrentMonth {
+                    Button {
+                        store.goToToday()
+                    } label: {
+                        Text("Today")
+                            .font(.system(size: Theme.FontSize.s12))
+                            .foregroundStyle(Theme.Color.accent200)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 4)
+                            .overlay(Capsule().strokeBorder(Theme.Color.accent700, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
         }
         .padding(.horizontal, Theme.Spacing.s20)
         .padding(.bottom, Theme.Spacing.s12)
+        .sheet(isPresented: $showingPicker) {
+            MonthPickerSheet(initialYear: Calendar.gregorian.component(.year, from: store.viewedMonth))
+        }
     }
 
     private var monthLabel: String {
@@ -153,7 +180,9 @@ struct MonthHeader: View {
     }
 
     private var throughLabel: String {
-        "through the \(store.elapsedDayOfMonth.withOrdinalSuffix)"
+        if store.isViewingPastMonth { return "complete" }
+        if store.isViewingFutureMonth { return "not started" }
+        return "through the \(store.elapsedDayOfMonth.withOrdinalSuffix)"
     }
 }
 

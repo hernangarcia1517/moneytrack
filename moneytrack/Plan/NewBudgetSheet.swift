@@ -53,7 +53,7 @@ struct NewBudgetSheet: View {
 
                 field(label: "Monthly budget", placeholder: "45", text: $budgetCapText, keyboard: .decimalPad)
 
-                Text("Applies from \(monthName) onward. You can change or delete it any time from the budget's page.")
+                Text("Applies to \(monthName). You can change or delete it any time from the budget's page.")
                     .font(.system(size: Theme.FontSize.s12))
                     .foregroundStyle(Theme.Color.textFaint)
             }
@@ -113,7 +113,7 @@ struct NewBudgetSheet: View {
     private var monthName: String {
         let formatter = DateFormatter()
         formatter.calendar = .gregorian
-        formatter.dateFormat = "LLLL"
+        formatter.dateFormat = "LLLL yyyy"
         return formatter.string(from: store.currentMonth.start)
     }
 

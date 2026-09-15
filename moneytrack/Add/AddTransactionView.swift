@@ -37,6 +37,7 @@ struct AddTransactionView: View {
     @State private var note: String
     @State private var selectedDay: Int
     @State private var isAddingBudget = false
+    @State private var isShowingPendingConfirm = false
 
     private static let titles = ["Amount", "Where", "Budget", "Review"]
 
@@ -90,7 +91,12 @@ struct AddTransactionView: View {
         }
         .onAppear {
             if !isEditing {
-                selectedDay = store.elapsedDayOfMonth
+                selectedDay = store.defaultTransactionDay
+            }
+        }
+        .overlay {
+            if isShowingPendingConfirm {
+                pendingConfirmOverlay
             }
         }
     }
@@ -531,7 +537,20 @@ struct AddTransactionView: View {
         if step == 3 { save() } else { step += 1 }
     }
 
+    /// Saving/editing a transaction while viewing a past or future month
+    /// asks once before it lets you (per session, per month) — matches the
+    /// design prototype exactly: only this is gated, not cap edits or
+    /// budget creation.
     private func save() {
+        guard selectedBudgetID != nil else { return }
+        if !store.isViewingCurrentMonth && !store.hasConfirmedOffMonthEdit {
+            isShowingPendingConfirm = true
+            return
+        }
+        commitSave()
+    }
+
+    private func commitSave() {
         guard let budgetID = selectedBudgetID else { return }
         let date = date(forDay: selectedDay)
         if let editingTransaction {
@@ -553,6 +572,77 @@ struct AddTransactionView: View {
             ))
         }
         onSaved(budgetID)
+    }
+
+    private var pendingConfirmOverlay: some View {
+        ZStack {
+            Color(hex: 0x0C0D16).opacity(0.78)
+                .ignoresSafeArea()
+
+            VStack(alignment: .leading, spacing: 0) {
+                Text(pendingTitle)
+                    .font(.system(size: Theme.FontSize.s17, weight: .medium))
+                    .foregroundStyle(Theme.Color.text)
+
+                Text(pendingBody)
+                    .font(.system(size: Theme.FontSize.s13))
+                    .foregroundStyle(Theme.Color.neutral300)
+                    .lineSpacing(4)
+                    .padding(.top, Theme.Spacing.s10)
+
+                HStack(spacing: 10) {
+                    Button {
+                        isShowingPendingConfirm = false
+                    } label: {
+                        Text("Cancel")
+                            .font(.system(size: Theme.FontSize.s14))
+                            .foregroundStyle(Theme.Color.neutral200)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 11)
+                            .overlay(RoundedRectangle(cornerRadius: Theme.Radius.card).strokeBorder(Theme.Color.neutral700, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        store.confirmOffMonthEdit()
+                        isShowingPendingConfirm = false
+                        commitSave()
+                    } label: {
+                        Text("Continue")
+                            .font(.system(size: Theme.FontSize.s14))
+                            .foregroundStyle(Theme.Color.accent200)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 11)
+                            .overlay(RoundedRectangle(cornerRadius: Theme.Radius.card).strokeBorder(Theme.Color.accent, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.top, 22)
+            }
+            .padding(.horizontal, Theme.Spacing.gutter)
+            .padding(.top, 22)
+            .padding(.bottom, Theme.Spacing.s16)
+            .background(Theme.Color.neutral900)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.card))
+            .overlay(RoundedRectangle(cornerRadius: Theme.Radius.card).strokeBorder(Theme.Color.neutral700, lineWidth: 1))
+            .padding(.horizontal, 28)
+        }
+    }
+
+    private var pendingTitle: String {
+        store.isViewingFutureMonth ? "This month hasn't happened yet" : "You're changing a closed month"
+    }
+
+    private var pendingBody: String {
+        let formatter = DateFormatter()
+        formatter.calendar = .gregorian
+        formatter.dateFormat = "LLLL yyyy"
+        let monthName = formatter.string(from: store.currentMonth.start)
+        if store.isViewingFutureMonth {
+            return "Anything you save here counts against \(monthName), not this month. Continue?"
+        } else {
+            return "\(monthName) is already settled. Your change won't affect any month after it. Continue?"
+        }
     }
 
     private static func inputString(for amount: Decimal) -> String {

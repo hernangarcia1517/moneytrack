@@ -49,10 +49,14 @@ enum Theme {
         // ramp here as later phases need it rather than reusing an
         // unrelated older semantic token that merely looks close.
         static let neutral100 = SwiftUI.Color(hex: 0xF3F5FE)
+        static let neutral200 = SwiftUI.Color(hex: 0xE4E7F5)
+        static let neutral300 = SwiftUI.Color(hex: 0xCFD3E5)
         static let neutral400 = SwiftUI.Color(hex: 0xB2B6CA)
+        static let neutral500 = SwiftUI.Color(hex: 0x9397AB)
         static let neutral600 = SwiftUI.Color(hex: 0x75798C)
         static let neutral700 = SwiftUI.Color(hex: 0x595D6C)
         static let neutral800 = SwiftUI.Color(hex: 0x3F424D)
+        static let neutral900 = SwiftUI.Color(hex: 0x292B31)
         static let accent200 = SwiftUI.Color(hex: 0xE7E5FE)
         static let accent700 = SwiftUI.Color(hex: 0x5D5294)
     }
