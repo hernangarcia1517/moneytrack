@@ -40,23 +40,24 @@ final class BudgetStore {
             budgets = loaded.budgets
             transactions = loaded.transactions
         } else {
-            let seed = BudgetStore.seedData()
-            budgets = seed.budgets
-            transactions = seed.transactions
+            // No mock/seed data — a fresh install (or a wiped local store)
+            // starts completely empty; the user adds their own budgets and
+            // transactions from here.
+            budgets = []
+            transactions = []
         }
     }
 
     // MARK: - Month
 
-    /// The app's fixed "today" — not the device clock. The mock data is
-    /// anchored to March 2026, and the design itself (including the V2
-    /// prototype's own internal state) treats "today" as this fixed
-    /// simulated date rather than `Date()`, so month navigation moving away
-    /// from and back to it stays meaningful without the seed data ever
-    /// looking stale relative to a real, ever-advancing clock.
-    static let referenceDate: Date = {
-        Calendar.gregorian.date(from: DateComponents(year: 2026, month: 3, day: 16))!
-    }()
+    /// The real "today" — the device clock, read fresh on every access
+    /// (not cached at launch) so it stays correct if the app is left open
+    /// across midnight. Was a fixed simulated date while the app shipped
+    /// with mock data anchored to a specific month; now that there's no
+    /// seed data, "today" should be genuinely today.
+    static var referenceDate: Date {
+        Date()
+    }
 
     var currentMonth: DateInterval {
         Calendar.gregorian.dateInterval(of: .month, for: viewedMonth)!
