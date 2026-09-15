@@ -87,6 +87,7 @@ enum Theme {
     enum FontSize {
         static let s52: CGFloat = 52   // headline
         static let s32: CGFloat = 32   // Spending scrub headline
+        static let s30: CGFloat = 30   // Monthly budgets total
         static let s48: CGFloat = 48   // amount entry
         static let s26: CGFloat = 26   // budget detail title
         static let s22: CGFloat = 22   // stat values

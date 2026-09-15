@@ -7,6 +7,15 @@
 
 import SwiftUI
 
+/// The two destinations `PlanView` can push, as of Phase 6 of a 2026-09-14
+/// design update. `.monthlyBudgets` and `.budget` can appear alongside each
+/// other in a single `NavigationStack`, so both live on one path type
+/// rather than PlanView needing two separate stacks/paths.
+enum PlanRoute: Hashable {
+    case budget(Budget)
+    case monthlyBudgets
+}
+
 struct PlanView: View {
     @Environment(BudgetStore.self) private var store
 
@@ -17,7 +26,7 @@ struct PlanView: View {
     @State private var expanded: Set<BudgetGroup> = []
     @State private var newBudgetGroup: BudgetGroup?
     @State private var openBudgetID: Budget.ID?
-    @State private var path: [Budget] = []
+    @State private var path: [PlanRoute] = []
 
     private var month: DateInterval { store.currentMonth }
 
@@ -39,7 +48,7 @@ struct PlanView: View {
                                 openBudgetID: $openBudgetID,
                                 onToggle: { toggle(group) },
                                 onAddBudget: { newBudgetGroup = group },
-                                onSelectBudget: { path.append($0) }
+                                onSelectBudget: { path.append(.budget($0)) }
                             )
                         }
                     }
@@ -49,8 +58,19 @@ struct PlanView: View {
                 }
             }
             .background(Theme.Color.background)
-            .navigationDestination(for: Budget.self) { budget in
-                BudgetDetailView(budget: budget, groupToExpand: $groupToExpand)
+            .navigationDestination(for: PlanRoute.self) { route in
+                switch route {
+                case .budget(let budget):
+                    BudgetDetailView(budget: budget, groupToExpand: $groupToExpand)
+                case .monthlyBudgets:
+                    MonthlyBudgetsView(groupToExpand: $groupToExpand) { budget in
+                        // Replace, not push — tapping a row in Monthly
+                        // Budgets replaces it with that budget's detail
+                        // (matches the design: Back from detail returns to
+                        // Plan, not back to Monthly Budgets).
+                        path = [.budget(budget)]
+                    }
+                }
             }
         }
         .onChange(of: groupToExpand) { _, newValue in
@@ -83,14 +103,23 @@ struct PlanView: View {
     }
 
     private var footer: some View {
-        HStack {
-            Text("Budgeted this month")
-            Spacer()
-            Text(Money.string(store.totalPlanned(in: month)))
-                .monospacedDigit()
+        Button {
+            path.append(.monthlyBudgets)
+        } label: {
+            HStack {
+                HStack(spacing: 6) {
+                    Text("Budgeted this month")
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 10, weight: .semibold))
+                }
+                Spacer()
+                Text(Money.string(store.totalPlanned(in: month)))
+                    .monospacedDigit()
+            }
         }
+        .buttonStyle(.plain)
         .font(.system(size: Theme.FontSize.s13))
-        .foregroundStyle(Theme.Color.textMuted)
+        .foregroundStyle(Theme.Color.neutral400)
         .padding(.horizontal, Theme.Spacing.gutter)
         .padding(.top, Theme.Spacing.s20)
         .padding(.bottom, Theme.Spacing.s20)
