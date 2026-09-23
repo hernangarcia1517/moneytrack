@@ -12,8 +12,8 @@
 import SwiftUI
 
 struct DailyBars: View {
-    /// One entry per day of the month, in order, day 1 first — already
-    /// excludes Bills-group spend (that filtering happens in SpendingView).
+    /// One entry per day of the month, in order, day 1 first — every
+    /// group's spend, Bills included.
     let dailyTotals: [Decimal]
     let elapsedDayOfMonth: Int
     let axisStartLabel: String
