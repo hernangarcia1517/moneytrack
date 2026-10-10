@@ -22,13 +22,51 @@ private final class FakeAPI: MoneytrackAPI {
         return transactionsByMonth[month] ?? []
     }
 
-    func createBudget(name: String, group: BudgetGroup, cap: Decimal, month: String) async throws -> BudgetWithCap { throw APIError.invalidRequest }
-    func updateBudget(id: UUID, name: String?, group: BudgetGroup?) async throws -> Budget { throw APIError.invalidRequest }
-    func deleteBudget(id: UUID) async throws { throw APIError.invalidRequest }
-    func setCap(budgetID: UUID, month: String, amount: Decimal) async throws -> Decimal { throw APIError.invalidRequest }
-    func createTransaction(date: Date, merchant: String, budgetID: UUID, amount: Decimal, note: String) async throws -> Transaction { throw APIError.invalidRequest }
-    func updateTransaction(_ transaction: Transaction) async throws -> Transaction { throw APIError.invalidRequest }
-    func deleteTransaction(id: UUID) async throws { throw APIError.invalidRequest }
+    var writeError: APIError?
+    var deleteDelay: Duration?
+    private(set) var deleteCalls = 0
+
+    func createBudget(name: String, group: BudgetGroup, cap: Decimal, month: String) async throws -> BudgetWithCap {
+        if let writeError { throw writeError }
+        return BudgetWithCap(budget: Budget(name: name, group: group), cap: cap)
+    }
+
+    func updateBudget(id: UUID, name: String?, group: BudgetGroup?) async throws -> Budget {
+        if let writeError { throw writeError }
+        let existing = budgetsByMonth.values.flatMap { $0 }.first { $0.id == id }!.budget
+        return Budget(id: id, name: name ?? existing.name, group: group ?? existing.group)
+    }
+
+    func deleteBudget(id: UUID) async throws {
+        deleteCalls += 1
+        if let deleteDelay { try await Task.sleep(for: deleteDelay) }
+        if let writeError { throw writeError }
+    }
+
+    func setCap(budgetID: UUID, month: String, amount: Decimal) async throws -> Decimal {
+        if let writeError { throw writeError }
+        return amount
+    }
+
+    func createTransaction(date: Date, merchant: String, budgetID: UUID, amount: Decimal, note: String) async throws -> Transaction {
+        if let writeError { throw writeError }
+        return Transaction(date: date, merchant: merchant, budgetID: budgetID, amount: amount, note: note)
+    }
+
+    func updateTransaction(_ transaction: Transaction) async throws -> Transaction {
+        if let writeError { throw writeError }
+        return transaction
+    }
+
+    func deleteTransaction(id: UUID) async throws {
+        deleteCalls += 1
+        if let deleteDelay { try await Task.sleep(for: deleteDelay) }
+        if let writeError { throw writeError }
+    }
+}
+
+nonisolated enum FailingWrite: CaseIterable, Sendable {
+    case addTransaction, deleteTransaction, addBudget, setCap
 }
 
 private func day(_ string: String) -> Date { WireFormat.date(fromDay: string)! }
@@ -139,10 +177,143 @@ struct BudgetStoreTests {
         #expect(store.budgets.isEmpty)
     }
 
-    @Test func aServerErrorMessageIsShown() async {
+    // MARK: - Writes
+
+    private func loadedFixture(months: [String] = ["2026-10"]) async -> (FakeAPI, BudgetStore) {
         let (api, store) = fixture()
-        api.error = .server(status: 500, message: "Internal Server Error")
+        for month in months {
+            store.setViewedMonth(day("\(month)-15"))
+            await store.loadViewedMonth()
+        }
+        store.setViewedMonth(day("\(months[0])-15"))
+        return (api, store)
+    }
+
+    @Test func addingATransactionStoresTheServersCopy() async throws {
+        let (_, store) = await loadedFixture()
+        try await store.addTransaction(date: day("2026-10-20"), merchant: "Costco", budgetID: groceries.id, amount: money("80.00"), note: "")
+        #expect(store.transactions(for: groceries, in: store.currentMonth).map(\.merchant).contains("Costco"))
+        #expect(store.spent(groceries, in: store.currentMonth) == money("122.10"))
+    }
+
+    @Test func aTransactionInAMonthThatIsNotLoadedDoesNotMarkItLoaded() async throws {
+        let (_, store) = await loadedFixture()
+        try await store.addTransaction(date: day("2026-12-05"), merchant: "Costco", budgetID: groceries.id, amount: money("80.00"), note: "")
+        store.setViewedMonth(day("2026-12-05"))
+        #expect(store.status == .loading)
+    }
+
+    @Test(arguments: FailingWrite.allCases)
+    func aFailedWriteChangesNothing(write: FailingWrite) async {
+        let (api, store) = await loadedFixture()
+        let month = store.currentMonth
+        let target = store.transactions(in: month)[0]
+        let budgetsBefore = store.budgets
+        let idsBefore = store.transactions(in: month).map(\.id)
+        let spentBefore = store.totalSpent(in: month)
+        let plannedBefore = store.totalPlanned(in: month)
+
+        api.writeError = .unreachable
+        await #expect(throws: APIError.unreachable) {
+            switch write {
+            case .addTransaction:
+                try await store.addTransaction(date: day("2026-10-20"), merchant: "Costco", budgetID: groceries.id, amount: money("80.00"), note: "")
+            case .deleteTransaction:
+                try await store.delete(target)
+            case .addBudget:
+                _ = try await store.addBudget(name: "Gym", group: .wants, budgetCap: 1)
+            case .setCap:
+                try await store.setBudgetCap(groceries, to: money("400.00"), in: month)
+            }
+        }
+
+        #expect(store.budgets == budgetsBefore)
+        #expect(store.transactions(in: month).map(\.id) == idsBefore)
+        #expect(store.totalSpent(in: month) == spentBefore)
+        #expect(store.totalPlanned(in: month) == plannedBefore)
+    }
+
+    @Test func editingTheDateMovesATransactionToTheOtherMonth() async throws {
+        let (_, store) = await loadedFixture(months: ["2026-10", "2026-11"])
+        let october = store.transactions(in: store.currentMonth).first { $0.merchant == "Netflix" }!
+        var moved = october
+        moved.date = day("2026-11-02")
+        try await store.update(moved)
+        #expect(store.transactions(in: store.currentMonth).contains { $0.id == october.id } == false)
+        store.setViewedMonth(day("2026-11-10"))
+        #expect(store.transactions(in: store.currentMonth).contains { $0.id == october.id })
+    }
+
+    @Test func deletingATransactionRemovesItAfterTheServerAgrees() async throws {
+        let (_, store) = await loadedFixture()
+        let target = store.transactions(in: store.currentMonth)[0]
+        try await store.delete(target)
+        #expect(store.transactions(in: store.currentMonth).contains { $0.id == target.id } == false)
+    }
+
+    @Test func deletingSomethingAlreadyGoneCountsAsDeleted() async throws {
+        let (api, store) = await loadedFixture()
+        let target = store.transactions(in: store.currentMonth)[0]
+        api.writeError = .server(status: 404, message: "Transaction not found")
+        try await store.delete(target)
+        #expect(store.transactions(in: store.currentMonth).contains { $0.id == target.id } == false)
+    }
+
+    @Test func deletingTheSameThingTwiceAtOnceSendsOneRequest() async throws {
+        let (api, store) = await loadedFixture()
+        api.deleteDelay = .milliseconds(100)
+        let target = store.transactions(in: store.currentMonth)[0]
+        async let first: Void = store.delete(target)
+        async let second: Void = store.delete(target)
+        _ = try await (first, second)
+        #expect(api.deleteCalls == 1)
+    }
+
+    @Test func aNewBudgetIsSortedInAndGetsItsCapInEveryLoadedMonth() async throws {
+        let (_, store) = await loadedFixture(months: ["2026-10", "2026-11"])
+        let created = try await store.addBudget(name: "  Gym ", group: .wants, budgetCap: money("30.00"))
+        #expect(created.name == "Gym")
+        #expect(store.budgets.map(\.name) == ["Groceries", "Gym", "Netflix"])
+        #expect(store.budgetCap(created, in: store.currentMonth) == money("30.00"))
+        store.setViewedMonth(day("2026-11-10"))
+        #expect(store.budgetCap(created, in: store.currentMonth) == money("30.00"))
+    }
+
+    @Test func movingABudgetUsesTheServersAnswer() async throws {
+        let (_, store) = await loadedFixture()
+        try await store.move(netflix, to: .wants)
+        #expect(store.budgets.first { $0.id == netflix.id }?.group == .wants)
+        #expect(store.spent(.wants, in: store.currentMonth) == money("15.99"))
+    }
+
+    @Test func aCapEditUpdatesThisMonthAndDropsTheOtherLoadedMonths() async throws {
+        let (_, store) = await loadedFixture(months: ["2026-10", "2026-11"])
+        try await store.setBudgetCap(groceries, to: money("400.00"), in: store.currentMonth)
+        #expect(store.budgetCap(groceries, in: store.currentMonth) == money("400.00"))
+        #expect(store.status == .loaded)
+        store.setViewedMonth(day("2026-11-10"))
+        #expect(store.status == .loading)
         await store.loadViewedMonth()
-        #expect(store.status == .failed("Internal Server Error"))
+        #expect(store.budgetCap(groceries, in: store.currentMonth) == money("450.00"))
+    }
+
+    @Test func deletingABudgetRemovesItsTransactionsAndCaps() async throws {
+        let (_, store) = await loadedFixture(months: ["2026-10", "2026-11"])
+        try await store.deleteBudget(groceries)
+        #expect(store.budgets.map(\.name) == ["Netflix"])
+        #expect(store.transactions(in: store.currentMonth).allSatisfy { $0.budgetID != groceries.id })
+        #expect(store.totalPlanned(in: store.currentMonth) == money("15.99"))
+        store.setViewedMonth(day("2026-11-10"))
+        #expect(store.transactions(in: store.currentMonth).isEmpty)
+    }
+
+    @Test func aFailedWriteStartedThroughAttemptRaisesTheAlert() async {
+        let (api, store) = await loadedFixture()
+        api.writeError = .unreachable
+        store.attempt { try await store.move(netflix, to: .wants) }
+        for _ in 0..<50 where store.alertMessage == nil { try? await Task.sleep(for: .milliseconds(10)) }
+        #expect(store.alertMessage == "Can't reach the server.")
+        store.dismissAlert()
+        #expect(store.alertMessage == nil)
     }
 }

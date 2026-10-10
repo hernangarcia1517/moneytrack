@@ -32,7 +32,7 @@ struct GroupSection: View {
                             openID: $openBudgetID,
                             cornerRadius: Theme.Radius.row,
                             onTap: { onSelectBudget(budget) },
-                            onDelete: { store.deleteBudget(budget) }
+                            onDelete: { store.attempt { try await store.deleteBudget(budget) } }
                         ) {
                             BudgetRow(budget: budget)
                                 .padding(.vertical, 11)

@@ -16,6 +16,8 @@ struct BudgetDetailView: View {
     var groupToExpand: Binding<BudgetGroup?> = .constant(nil)
 
     @State private var budgetCapText: String = ""
+    @State private var isSavingCap = false
+    @FocusState private var isCapFocused: Bool
 
     private var month: DateInterval { store.currentMonth }
 
@@ -58,6 +60,12 @@ struct BudgetDetailView: View {
         .background(Theme.Color.background)
         .toolbar(.hidden, for: .navigationBar)
         .onAppear { budgetCapText = Self.budgetCapString(store.budgetCap(live, in: month)) }
+        .onDisappear {
+            guard canSaveCap, let cap = parsedCap else { return }
+            let budget = live
+            let month = month
+            store.attempt { try await store.setBudgetCap(budget, to: cap, in: month) }
+        }
     }
 
     // MARK: - Sections
@@ -110,6 +118,7 @@ struct BudgetDetailView: View {
 
             TextField("", text: $budgetCapText)
                 .keyboardType(.decimalPad)
+                .focused($isCapFocused)
                 .font(.system(size: Theme.FontSize.s15))
                 .foregroundStyle(Theme.Color.text)
                 .padding(.vertical, Theme.Spacing.s12)
@@ -119,14 +128,40 @@ struct BudgetDetailView: View {
                 .onChange(of: budgetCapText) { _, newValue in
                     let filtered = Self.filterDecimalInput(newValue)
                     if filtered != newValue { budgetCapText = filtered }
-                    if let budgetCap = Decimal(string: filtered), budgetCap != store.budgetCap(live, in: month) {
-                        store.setBudgetCap(live, to: budgetCap, in: month)
+                }
+                .toolbar {
+                    ToolbarItemGroup(placement: .keyboard) {
+                        Spacer()
+                        Button("Save", action: saveCap)
+                            .disabled(!canSaveCap)
                     }
                 }
 
-            Text("Applies to \(monthName) only. Every other month keeps its own.")
+            Text("Applies from \(monthName) onward.")
                 .font(.system(size: Theme.FontSize.s12))
                 .foregroundStyle(Theme.Color.neutral500)
+        }
+    }
+
+    private var parsedCap: Decimal? { Decimal(string: budgetCapText) }
+
+    private var canSaveCap: Bool {
+        guard !isSavingCap, let cap = parsedCap, store.budgets.contains(where: { $0.id == budget.id }) else { return false }
+        return cap != store.budgetCap(live, in: month)
+    }
+
+    private func saveCap() {
+        guard canSaveCap, let cap = parsedCap else { return }
+        isSavingCap = true
+        isCapFocused = false
+        Task {
+            defer { isSavingCap = false }
+            do {
+                try await store.setBudgetCap(live, to: cap, in: month)
+            } catch {
+                store.report(error)
+            }
+            budgetCapText = Self.budgetCapString(store.budgetCap(live, in: month))
         }
     }
 
@@ -148,8 +183,10 @@ struct BudgetDetailView: View {
                 ForEach(BudgetGroup.allCases) { group in
                     GroupChip(title: group.rawValue, isSelected: live.group == group) {
                         guard live.group != group else { return }
-                        store.move(live, to: group)
-                        groupToExpand.wrappedValue = group
+                        store.attempt {
+                            try await store.move(live, to: group)
+                            groupToExpand.wrappedValue = group
+                        }
                     }
                 }
             }
@@ -200,8 +237,10 @@ struct BudgetDetailView: View {
     // to bypass it.
     private var deleteButton: some View {
         Button {
-            store.deleteBudget(live)
-            dismiss()
+            store.attempt {
+                try await store.deleteBudget(live)
+                dismiss()
+            }
         } label: {
             Text("Delete budget and its transactions")
                 .font(.system(size: Theme.FontSize.s13))

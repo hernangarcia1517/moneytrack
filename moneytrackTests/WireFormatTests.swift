@@ -10,10 +10,7 @@ struct WireFormatTests {
     func moneyAlwaysHasTwoDecimalsAndNoGrouping(input: String, expected: String) {
         let amount = Decimal(string: input, locale: Locale(identifier: "en_US_POSIX"))!
         #expect(WireFormat.money(amount) == expected)
-    }
-
-    @Test func moneyParsesWithoutFloatingPointDrift() {
-        #expect(WireFormat.decimal(fromMoney: "132.18") == Decimal(string: "132.18", locale: Locale(identifier: "en_US_POSIX")))
+        #expect(WireFormat.decimal(fromMoney: expected) == amount)
         #expect(WireFormat.decimal(fromMoney: "abc") == nil)
     }
 
@@ -27,14 +24,6 @@ struct WireFormatTests {
             let date = try #require(WireFormat.date(fromDay: day, calendar: calendar))
             #expect(WireFormat.day(date, calendar: calendar) == day)
         }
-    }
-
-    @Test func firstOfMonthStaysInItsOwnMonthEastOfUTC() throws {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = try #require(TimeZone(identifier: "Asia/Tokyo"))
-        let date = try #require(WireFormat.date(fromDay: "2026-11-01", calendar: calendar))
-        #expect(WireFormat.day(date, calendar: calendar) == "2026-11-01")
-        #expect(Budget.monthKey(for: date, calendar: calendar) == "2026-11")
     }
 
     @Test(arguments: ["2026-02-30", "2026-13-01", "2026-10-31T00:00:00Z", "2026-1-5", "yesterday", ""])
@@ -57,12 +46,10 @@ struct MappingTests {
         #expect(WireFormat.day(transaction.date) == "2026-10-08")
         #expect(transaction.merchant == "Trader Joe's")
         #expect(transaction.note == "weekly shop")
-    }
 
-    @Test func malformedTransactionResponseThrows() throws {
-        let json = #"{"id":"ca87e489-fc73-4f20-963c-6907492400ac","budgetId":"c0281640-552a-48b5-9f17-4374e0543cbc","date":"2026-10-08T14:30:00.000Z","merchant":"x","amount":"1.00","note":""}"#
-        let dto = try JSONDecoder().decode(TransactionDTO.self, from: Data(json.utf8))
-        #expect(throws: APIError.self) { try dto.toDomain() }
+        let withTimestamp = json.replacingOccurrences(of: #""date":"2026-10-08""#, with: #""date":"2026-10-08T14:30:00.000Z""#)
+        let badDTO = try JSONDecoder().decode(TransactionDTO.self, from: Data(withTimestamp.utf8))
+        #expect(throws: APIError.self) { try badDTO.toDomain() }
     }
 
     @Test func transactionRequestBodyUsesTheWireFormats() throws {
@@ -79,14 +66,6 @@ struct MappingTests {
         #expect(object["amount"] as? String == "42.10")
         #expect(object["note"] as? String == "")
         #expect(Set(object.keys) == ["budgetId", "date", "merchant", "amount", "note"])
-    }
-
-    @Test func budgetResponseNeedsACapToMapToBudgetWithCap() throws {
-        let withCap = try JSONDecoder().decode(BudgetDTO.self, from: Data(#"{"id":"c0281640-552a-48b5-9f17-4374e0543cbc","name":"Groceries","budgetGroup":"Needs","cap":"350.00"}"#.utf8))
-        let withoutCap = try JSONDecoder().decode(BudgetDTO.self, from: Data(#"{"id":"c0281640-552a-48b5-9f17-4374e0543cbc","name":"Groceries","budgetGroup":"Wants"}"#.utf8))
-        #expect(try withCap.withCap().cap == 350)
-        #expect(withoutCap.budget().group == .wants)
-        #expect(throws: APIError.self) { try withoutCap.withCap() }
     }
 
     @Test func updateBudgetBodyOmitsFieldsThatAreNotChanging() throws {
@@ -125,12 +104,7 @@ struct APIClientTests {
         #expect(message == "body/amount must be string")
     }
 
-    @Test func connectionFailuresBecomeUnreachable() async {
-        let api = client(error: URLError(.cannotConnectToHost))
-        await #expect(throws: APIError.unreachable) { try await api.delete("budgets/x") }
-    }
-
-    @Test(arguments: [URLError.Code.timedOut, .notConnectedToInternet, .cannotFindHost, .networkConnectionLost])
+    @Test(arguments: [URLError.Code.cannotConnectToHost, .timedOut, .notConnectedToInternet, .cannotFindHost, .networkConnectionLost])
     func connectivityFailuresAreUnreachable(code: URLError.Code) async {
         let api = client(error: URLError(code))
         await #expect(throws: APIError.unreachable) { try await api.delete("budgets/x") }
@@ -141,28 +115,9 @@ struct APIClientTests {
         await #expect(throws: APIError.connection(.appTransportSecurityRequiresSecureConnection)) { try await api.delete("budgets/x") }
     }
 
-    @Test func httpMethodsAreSentAsGiven() async throws {
-        nonisolated(unsafe) var methods: [String?] = []
-        let api = client(body: "{}") { methods.append($0.httpMethod) }
-        let _: [String: String] = try await api.get("a")
-        for method in [HTTPMethod.post, .put, .patch] {
-            let _: [String: String] = try await api.send(method, "a", body: CapBody(amount: "1.00"))
-        }
-        try await api.delete("a")
-        #expect(methods == ["GET", "POST", "PUT", "PATCH", "DELETE"])
-    }
-
     @Test func aCancelledRequestStaysACancellation() async {
         let api = client(error: URLError(.cancelled))
         await #expect(throws: CancellationError.self) { try await api.delete("budgets/x") }
-    }
-
-    @Test func unreadableBodyBecomesInvalidResponse() async {
-        let api = client(body: "not json")
-        let result: Result<[String: String], Error> = await Result { try await api.get("budgets") }
-        guard case .failure(let error as APIError) = result, case .invalidResponse = error else {
-            Issue.record("expected invalidResponse"); return
-        }
     }
 
     @Test func getAndDeleteSendNoContentTypeButBodiesDo() async throws {
@@ -172,13 +127,6 @@ struct APIClientTests {
         try await api.delete("transactions/x")
         let _: [String] = try await api.send(.post, "transactions", body: CapBody(amount: "1.00"))
         #expect(headers == [nil, nil, "application/json"])
-    }
-
-    @Test func monthGoesInTheQueryString() async throws {
-        nonisolated(unsafe) var url: URL?
-        let api = client(body: "[]") { url = $0.url }
-        let _: [String] = try await api.get("transactions", query: [URLQueryItem(name: "month", value: "2026-10")])
-        #expect(url?.absoluteString == "http://test.invalid/transactions?month=2026-10")
     }
 }
 

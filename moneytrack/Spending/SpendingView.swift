@@ -176,7 +176,7 @@ struct SpendingView: View {
             id: transaction.id,
             openID: $openTransactionID,
             onTap: { transactionToEdit = transaction },
-            onDelete: { store.delete(transaction) }
+            onDelete: { store.attempt { try await store.delete(transaction) } }
         ) {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {

@@ -38,6 +38,8 @@ struct AddTransactionView: View {
     @State private var selectedDay: Int
     @State private var isAddingBudget = false
     @State private var isShowingPendingConfirm = false
+    @State private var isSaving = false
+    @State private var errorMessage: String?
 
     private static let titles = ["Amount", "Where", "Budget", "Review"]
 
@@ -82,6 +84,8 @@ struct AddTransactionView: View {
             Spacer(minLength: 0)
             actionBar
         }
+        .allowsHitTesting(!isSaving)
+        .errorAlert($errorMessage)
         .background(Theme.Color.background.ignoresSafeArea())
         .sheet(isPresented: $isAddingBudget) {
             NewBudgetSheet(preselectedGroup: .bills) { budget in
@@ -383,9 +387,17 @@ struct AddTransactionView: View {
     }
 
     private func deleteEditingTransaction() {
-        guard let editingTransaction else { return }
-        store.delete(editingTransaction)
-        dismiss()
+        guard let editingTransaction, !isSaving else { return }
+        isSaving = true
+        Task {
+            defer { isSaving = false }
+            do {
+                try await store.delete(editingTransaction)
+                dismiss()
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
     }
 
     // Step 5 — When (date, within the viewed month)
@@ -464,9 +476,13 @@ struct AddTransactionView: View {
                     }
 
                     Button(action: primaryAction) {
-                        Text(primaryLabel)
-                            .font(.system(size: Theme.FontSize.s15))
-                            .foregroundStyle(isStepSatisfied ? Theme.Color.accent : Theme.Color.disabledInk)
+                        if isSaving {
+                            ProgressView().tint(Theme.Color.accent)
+                        } else {
+                            Text(primaryLabel)
+                                .font(.system(size: Theme.FontSize.s15))
+                                .foregroundStyle(isStepSatisfied ? Theme.Color.accent : Theme.Color.disabledInk)
+                        }
                     }
                     .buttonStyle(.plain)
                     .frame(maxWidth: .infinity)
@@ -525,27 +541,30 @@ struct AddTransactionView: View {
     }
 
     private func commitSave() {
-        guard let budgetID = selectedBudgetID else { return }
+        guard let budgetID = selectedBudgetID, !isSaving else { return }
         let date = date(forDay: selectedDay)
-        if let editingTransaction {
-            store.update(Transaction(
-                id: editingTransaction.id,
-                date: date,
-                merchant: displayedMerchant,
-                budgetID: budgetID,
-                amount: amount,
-                note: note
-            ))
-        } else {
-            store.add(Transaction(
-                date: date,
-                merchant: displayedMerchant,
-                budgetID: budgetID,
-                amount: amount,
-                note: note
-            ))
+        let merchant = displayedMerchant
+        isSaving = true
+        Task {
+            defer { isSaving = false }
+            do {
+                if let editingTransaction {
+                    try await store.update(Transaction(
+                        id: editingTransaction.id,
+                        date: date,
+                        merchant: merchant,
+                        budgetID: budgetID,
+                        amount: amount,
+                        note: note
+                    ))
+                } else {
+                    try await store.addTransaction(date: date, merchant: merchant, budgetID: budgetID, amount: amount, note: note)
+                }
+                onSaved(budgetID)
+            } catch {
+                errorMessage = error.localizedDescription
+            }
         }
-        onSaved(budgetID)
     }
 
     private var pendingConfirmOverlay: some View {

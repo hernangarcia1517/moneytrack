@@ -31,6 +31,10 @@ final class BudgetStore {
     /// Bumped by `retry()`; the view that drives loading restarts it when this changes.
     private(set) var reloadToken = 0
 
+    /// Set when a write started through `attempt` fails; shown by ContentView.
+    private(set) var alertMessage: String?
+    @ObservationIgnored private var deletingIDs: Set<UUID> = []
+
     /// The month currently being viewed — starts on `referenceDate`'s month
     /// and is user-navigable via the month picker (`MonthPickerSheet`).
     /// Always normalized to the first instant of its month.
@@ -85,6 +89,22 @@ final class BudgetStore {
 
     func retry() {
         reloadToken += 1
+    }
+
+    func report(_ error: Error) {
+        guard !(error is CancellationError) else { return }
+        alertMessage = error.localizedDescription
+    }
+
+    func dismissAlert() {
+        alertMessage = nil
+    }
+
+    /// Runs a write from a non-modal screen and reports a failure through the global alert.
+    func attempt(_ work: @escaping () async throws -> Void) {
+        Task {
+            do { try await work() } catch { report(error) }
+        }
     }
 
     // MARK: - Month
@@ -200,55 +220,82 @@ final class BudgetStore {
         }
     }
 
-    // MARK: - Mutations (local only until the write step: they change the cached
-    // months in memory and are lost on the next load)
+    // MARK: - Mutations
+    // Each one calls the server first and updates the cache from the response, so
+    // a failure leaves what's on screen untouched.
 
-    func add(_ transaction: Transaction) {
-        transactionsByMonth[Budget.monthKey(for: transaction.date)]?.append(transaction)
+    func addTransaction(date: Date, merchant: String, budgetID: Budget.ID, amount: Decimal, note: String) async throws {
+        let created = try await api.createTransaction(date: date, merchant: merchant, budgetID: budgetID, amount: amount, note: note)
+        insert(created)
     }
 
-    func update(_ transaction: Transaction) {
-        delete(transaction)
-        add(transaction)
+    func update(_ transaction: Transaction) async throws {
+        let saved = try await api.updateTransaction(transaction)
+        removeTransaction(id: saved.id)
+        insert(saved)
     }
 
-    func delete(_ transaction: Transaction) {
-        for key in Array(transactionsByMonth.keys) {
-            transactionsByMonth[key]?.removeAll { $0.id == transaction.id }
-        }
+    func delete(_ transaction: Transaction) async throws {
+        guard deletingIDs.insert(transaction.id).inserted else { return }
+        defer { deletingIDs.remove(transaction.id) }
+        do {
+            try await api.deleteTransaction(id: transaction.id)
+        } catch APIError.server(let status, _) where status == 404 {}
+        removeTransaction(id: transaction.id)
     }
 
     @discardableResult
-    func addBudget(name: String, group: BudgetGroup, budgetCap: Decimal) -> Budget {
-        let budget = Budget(name: name.trimmingCharacters(in: .whitespaces), group: group)
-        budgets.append(budget)
+    func addBudget(name: String, group: BudgetGroup, budgetCap: Decimal) async throws -> Budget {
+        let created = try await api.createBudget(name: name.trimmingCharacters(in: .whitespaces), group: group, cap: budgetCap, month: viewedMonthKey)
+        budgets.append(created.budget)
+        budgets.sort { $0.name.lowercased() < $1.name.lowercased() }
         for key in Array(capsByMonth.keys) {
-            capsByMonth[key]?[budget.id] = budgetCap
+            capsByMonth[key]?[created.id] = created.cap
         }
-        return budget
+        return created.budget
     }
 
-    /// Applies from `month` onward, like the server.
-    func setBudgetCap(_ budget: Budget, to budgetCap: Decimal, in month: DateInterval) {
+    /// A new cap row can change other months too (later months without their own row, and
+    /// months before the earliest row), so only the edited month is updated from the
+    /// response and every other loaded month's caps are dropped to be fetched again.
+    func setBudgetCap(_ budget: Budget, to budgetCap: Decimal, in month: DateInterval) async throws {
         let from = Budget.monthKey(for: month.start)
-        for key in Array(capsByMonth.keys) where key >= from {
-            capsByMonth[key]?[budget.id] = budgetCap
+        let confirmed = try await api.setCap(budgetID: budget.id, month: from, amount: budgetCap)
+        for key in Array(capsByMonth.keys) where key != from {
+            capsByMonth[key] = nil
         }
+        capsByMonth[from]?[budget.id] = confirmed
     }
 
-    func move(_ budget: Budget, to group: BudgetGroup) {
-        guard let index = budgets.firstIndex(where: { $0.id == budget.id }) else { return }
-        budgets[index].group = group
+    func move(_ budget: Budget, to group: BudgetGroup) async throws {
+        let updated = try await api.updateBudget(id: budget.id, name: nil, group: group)
+        guard let index = budgets.firstIndex(where: { $0.id == updated.id }) else { return }
+        budgets[index] = updated
     }
 
     /// Deleting a budget cascades to its transactions.
-    func deleteBudget(_ budget: Budget) {
+    func deleteBudget(_ budget: Budget) async throws {
+        guard deletingIDs.insert(budget.id).inserted else { return }
+        defer { deletingIDs.remove(budget.id) }
+        do {
+            try await api.deleteBudget(id: budget.id)
+        } catch APIError.server(let status, _) where status == 404 {}
         budgets.removeAll { $0.id == budget.id }
         for key in Array(transactionsByMonth.keys) {
             transactionsByMonth[key]?.removeAll { $0.budgetID == budget.id }
         }
         for key in Array(capsByMonth.keys) {
             capsByMonth[key]?[budget.id] = nil
+        }
+    }
+
+    private func insert(_ transaction: Transaction) {
+        transactionsByMonth[Budget.monthKey(for: transaction.date)]?.append(transaction)
+    }
+
+    private func removeTransaction(id: Transaction.ID) {
+        for key in Array(transactionsByMonth.keys) {
+            transactionsByMonth[key]?.removeAll { $0.id == id }
         }
     }
 }

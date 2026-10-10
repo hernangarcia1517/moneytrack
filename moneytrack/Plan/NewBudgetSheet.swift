@@ -20,6 +20,8 @@ struct NewBudgetSheet: View {
     @State private var name = ""
     @State private var group: BudgetGroup
     @State private var budgetCapText = ""
+    @State private var isSaving = false
+    @State private var errorMessage: String?
 
     init(preselectedGroup: BudgetGroup, onCreate: @escaping (Budget) -> Void = { _ in }) {
         self.preselectedGroup = preselectedGroup
@@ -53,7 +55,7 @@ struct NewBudgetSheet: View {
 
                 field(label: "Monthly budget", placeholder: "45", text: $budgetCapText, keyboard: .decimalPad)
 
-                Text("Applies to \(monthName). You can change or delete it any time from the budget's page.")
+                Text("Applies from \(monthName) onward. You can change or delete it any time from the budget's page.")
                     .font(.system(size: Theme.FontSize.s12))
                     .foregroundStyle(Theme.Color.textFaint)
             }
@@ -71,12 +73,16 @@ struct NewBudgetSheet: View {
         )
         .presentationDetents([.medium])
         .presentationDragIndicator(.hidden)
+        .interactiveDismissDisabled(isSaving)
+        .allowsHitTesting(!isSaving)
+        .errorAlert($errorMessage)
     }
 
     private var header: some View {
         HStack {
             Button("Cancel") { dismiss() }
                 .foregroundStyle(Theme.Color.textMuted)
+                .disabled(isSaving)
 
             Spacer()
 
@@ -86,8 +92,14 @@ struct NewBudgetSheet: View {
 
             Spacer()
 
-            Button("Add", action: add)
-                .foregroundStyle(canAdd ? Theme.Color.accent : Theme.Color.disabledInk)
+            Button(action: add) {
+                if isSaving {
+                    ProgressView().tint(Theme.Color.accent)
+                } else {
+                    Text("Add")
+                }
+            }
+            .foregroundStyle(canAdd ? Theme.Color.accent : Theme.Color.disabledInk)
         }
         .font(.system(size: Theme.FontSize.s15))
         .padding(.horizontal, Theme.Spacing.gutter)
@@ -118,10 +130,18 @@ struct NewBudgetSheet: View {
     }
 
     private func add() {
-        guard canAdd, !store.isNameTaken(trimmedName) else { return }
+        guard canAdd, !isSaving, !store.isNameTaken(trimmedName) else { return }
         let budgetCap = Decimal(string: budgetCapText) ?? 0
-        let budget = store.addBudget(name: trimmedName, group: group, budgetCap: budgetCap)
-        dismiss()
-        onCreate(budget)
+        isSaving = true
+        Task {
+            defer { isSaving = false }
+            do {
+                let budget = try await store.addBudget(name: trimmedName, group: group, budgetCap: budgetCap)
+                dismiss()
+                onCreate(budget)
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
     }
 }

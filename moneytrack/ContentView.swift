@@ -44,6 +44,7 @@ struct ContentView: View {
                 bottomBar
             }
         }
+        .errorAlert(Binding(get: { store.alertMessage }, set: { _ in store.dismissAlert() }))
         .task(id: LoadTrigger(month: store.viewedMonth, token: store.reloadToken)) {
             await store.loadViewedMonth()
         }
@@ -79,12 +80,13 @@ struct ContentView: View {
             } label: {
                 Image(systemName: "plus")
                     .font(.system(size: 22, weight: .regular))
-                    .foregroundStyle(Theme.Color.accent)
+                    .foregroundStyle(canAdd ? Theme.Color.accent : Theme.Color.disabledInk)
                     .frame(width: 52, height: 52)
                     .overlay(
-                        Circle().strokeBorder(Theme.Color.accent, lineWidth: 1)
+                        Circle().strokeBorder(canAdd ? Theme.Color.accent : Theme.Color.border, lineWidth: 1)
                     )
             }
+            .disabled(!canAdd)
             .offset(y: -4)
 
             Spacer()
@@ -103,6 +105,8 @@ struct ContentView: View {
                 .ignoresSafeArea(edges: .bottom)
         )
     }
+
+    private var canAdd: Bool { store.status == .loaded }
 
     private func tabItem(tab: AppTab, title: String, systemImage: String) -> some View {
         let isActive = selectedTab == tab

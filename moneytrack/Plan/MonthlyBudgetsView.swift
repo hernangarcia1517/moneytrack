@@ -138,7 +138,7 @@ struct MonthlyBudgetsView: View {
                     id: budget.id,
                     openID: $openBudgetID,
                     onTap: { onSelectBudget(budget) },
-                    onDelete: { store.deleteBudget(budget) }
+                    onDelete: { store.attempt { try await store.deleteBudget(budget) } }
                 ) {
                     HStack {
                         Text(budget.name)
