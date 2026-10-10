@@ -20,6 +20,11 @@ struct ContentView: View {
     @State private var groupToExpand: BudgetGroup?
     @State private var transactionToEdit: Transaction?
 
+    private struct LoadTrigger: Hashable {
+        var month: Date
+        var token: Int
+    }
+
     var body: some View {
         ZStack(alignment: .bottom) {
             Theme.Color.background.ignoresSafeArea()
@@ -38,6 +43,9 @@ struct ContentView: View {
                 Spacer()
                 bottomBar
             }
+        }
+        .task(id: LoadTrigger(month: store.viewedMonth, token: store.reloadToken)) {
+            await store.loadViewedMonth()
         }
         .fullScreenCover(isPresented: $isAddingTransaction) {
             AddTransactionView { budgetID in

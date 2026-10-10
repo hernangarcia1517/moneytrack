@@ -6,18 +6,30 @@
 //  ephemeral UI state (which step of Add they're on, which group is
 //  expanded, etc.) — everything about budgets and transactions lives here.
 //
-//  Nothing derived is ever stored: group totals, remaining amounts, the
-//  headline figure and the daily bars are all computed from
-//  `transactions` + `budgets` on read.
+//  Data comes from the server one month at a time and is cached per month,
+//  keyed by `Budget.monthKey(for:)`. Nothing derived is ever stored: group
+//  totals, remaining amounts, the headline figure and the daily bars are all
+//  computed from the cached transactions, budgets and caps on read.
 //
 
 import Foundation
 import Observation
 
+enum LoadStatus: Equatable {
+    case loading
+    case loaded
+    case failed(String)
+}
+
 @Observable
 final class BudgetStore {
-    var budgets: [Budget]
-    var transactions: [Transaction]
+    private(set) var budgets: [Budget] = []
+    private var transactionsByMonth: [String: [Transaction]] = [:]
+    private var capsByMonth: [String: [Budget.ID: Decimal]] = [:]
+    private var loadError: Error?
+
+    /// Bumped by `retry()`; the view that drives loading restarts it when this changes.
+    private(set) var reloadToken = 0
 
     /// The month currently being viewed — starts on `referenceDate`'s month
     /// and is user-navigable via the month picker (`MonthPickerSheet`).
@@ -31,21 +43,48 @@ final class BudgetStore {
     /// budget creation.
     private(set) var hasConfirmedOffMonthEdit = false
 
-    @ObservationIgnored private let persistence = BudgetStorePersistence()
-    @ObservationIgnored private var saveTask: Task<Void, Never>?
+    @ObservationIgnored private let api: any MoneytrackAPI
 
-    init() {
+    init(api: any MoneytrackAPI = LiveMoneytrackAPI()) {
+        self.api = api
         viewedMonth = Calendar.gregorian.dateInterval(of: .month, for: BudgetStore.referenceDate)!.start
-        if let loaded = persistence.load() {
-            budgets = loaded.budgets
-            transactions = loaded.transactions
-        } else {
-            // No mock/seed data — a fresh install (or a wiped local store)
-            // starts completely empty; the user adds their own budgets and
-            // transactions from here.
-            budgets = []
-            transactions = []
+    }
+
+    // MARK: - Loading
+
+    private var viewedMonthKey: String { Budget.monthKey(for: viewedMonth) }
+
+    var status: LoadStatus {
+        let key = viewedMonthKey
+        if transactionsByMonth[key] != nil, capsByMonth[key] != nil { return .loaded }
+        if let loadError { return .failed(loadError.localizedDescription) }
+        return .loading
+    }
+
+    /// Fetches the viewed month's budgets, caps and transactions together and
+    /// replaces that month's cache. A cancelled load (the user moved to another
+    /// month) applies nothing.
+    func loadViewedMonth() async {
+        let key = viewedMonthKey
+        loadError = nil
+        do {
+            async let fetchedBudgets = api.budgets(month: key)
+            async let fetchedTransactions = api.transactions(month: key)
+            let (budgetList, transactionList) = try await (fetchedBudgets, fetchedTransactions)
+            guard !Task.isCancelled else { return }
+            budgets = budgetList.map(\.budget)
+            capsByMonth[key] = Dictionary(budgetList.map { ($0.id, $0.cap) }, uniquingKeysWith: { $1 })
+            transactionsByMonth[key] = transactionList
+        } catch is CancellationError {
+            return
+        } catch {
+            guard !Task.isCancelled else { return }
+            loadError = error
         }
+    }
+
+    func retry() {
+        reloadToken += 1
     }
 
     // MARK: - Month
@@ -112,7 +151,7 @@ final class BudgetStore {
     }
 
     func transactions(in month: DateInterval) -> [Transaction] {
-        transactions.filter { month.contains($0.date) }
+        transactionsByMonth[Budget.monthKey(for: month.start)] ?? []
     }
 
     func transactions(for budget: Budget, in month: DateInterval) -> [Transaction] {
@@ -123,13 +162,9 @@ final class BudgetStore {
         transactions(for: budget, in: month).reduce(0) { $0 + $1.amount }
     }
 
-    /// The budget cap in effect for `budget` during `month`: that month's
-    /// own override if one has been set, otherwise the budget's base
-    /// `monthlyBudgetCap`. Self-contained per month — this never mutates
-    /// state, so reading one month never affects another.
+    /// The cap in effect for `budget` during `month`, as the server resolved it.
     func budgetCap(_ budget: Budget, in month: DateInterval) -> Decimal {
-        let key = Budget.monthKey(for: month.start)
-        return budget.budgetCapOverrides[key] ?? budget.monthlyBudgetCap
+        capsByMonth[Budget.monthKey(for: month.start)]?[budget.id] ?? 0
     }
 
     /// budgetCap - spent, may be negative.
@@ -153,10 +188,6 @@ final class BudgetStore {
         budgets.reduce(0) { $0 + budgetCap($1, in: month) }
     }
 
-    func transactionCount(for budget: Budget) -> Int {
-        transactions.filter { $0.budgetID == budget.id }.count
-    }
-
     func budget(for id: Budget.ID?) -> Budget? {
         guard let id else { return nil }
         return budgets.first { $0.id == id }
@@ -169,80 +200,55 @@ final class BudgetStore {
         }
     }
 
-    /// The most recent distinct merchants, newest first — used as quick-fill
-    /// chips on the "Where" step of Add.
-    func recentMerchants(limit: Int = 6) -> [String] {
-        var seen = Set<String>()
-        var result: [String] = []
-        for t in transactions.sorted(by: { $0.date > $1.date }) {
-            let merchant = t.merchant.trimmingCharacters(in: .whitespaces)
-            guard !merchant.isEmpty, !seen.contains(merchant.lowercased()) else { continue }
-            seen.insert(merchant.lowercased())
-            result.append(merchant)
-            if result.count == limit { break }
-        }
-        return result
-    }
-
-    // MARK: - Mutations (transactions)
+    // MARK: - Mutations (local only until the write step: they change the cached
+    // months in memory and are lost on the next load)
 
     func add(_ transaction: Transaction) {
-        transactions.append(transaction)
-        scheduleSave()
+        transactionsByMonth[Budget.monthKey(for: transaction.date)]?.append(transaction)
     }
 
     func update(_ transaction: Transaction) {
-        guard let index = transactions.firstIndex(where: { $0.id == transaction.id }) else { return }
-        transactions[index] = transaction
-        scheduleSave()
+        delete(transaction)
+        add(transaction)
     }
 
     func delete(_ transaction: Transaction) {
-        transactions.removeAll { $0.id == transaction.id }
-        scheduleSave()
+        for key in Array(transactionsByMonth.keys) {
+            transactionsByMonth[key]?.removeAll { $0.id == transaction.id }
+        }
     }
-
-    // MARK: - Mutations (budgets)
 
     @discardableResult
     func addBudget(name: String, group: BudgetGroup, budgetCap: Decimal) -> Budget {
-        let budget = Budget(name: name.trimmingCharacters(in: .whitespaces), group: group, monthlyBudgetCap: budgetCap)
+        let budget = Budget(name: name.trimmingCharacters(in: .whitespaces), group: group)
         budgets.append(budget)
-        scheduleSave()
+        for key in Array(capsByMonth.keys) {
+            capsByMonth[key]?[budget.id] = budgetCap
+        }
         return budget
     }
 
-    /// Sets `budget`'s budget cap for `month` only — every other month
-    /// (past or future) keeps whatever value it already resolves to.
+    /// Applies from `month` onward, like the server.
     func setBudgetCap(_ budget: Budget, to budgetCap: Decimal, in month: DateInterval) {
-        guard let index = budgets.firstIndex(where: { $0.id == budget.id }) else { return }
-        let key = Budget.monthKey(for: month.start)
-        budgets[index].budgetCapOverrides[key] = budgetCap
-        scheduleSave()
+        let from = Budget.monthKey(for: month.start)
+        for key in Array(capsByMonth.keys) where key >= from {
+            capsByMonth[key]?[budget.id] = budgetCap
+        }
     }
 
     func move(_ budget: Budget, to group: BudgetGroup) {
         guard let index = budgets.firstIndex(where: { $0.id == budget.id }) else { return }
         budgets[index].group = group
-        scheduleSave()
     }
 
     /// Deleting a budget cascades to its transactions.
     func deleteBudget(_ budget: Budget) {
-        transactions.removeAll { $0.budgetID == budget.id }
         budgets.removeAll { $0.id == budget.id }
-        scheduleSave()
-    }
-
-    // MARK: - Persistence
-
-    private func scheduleSave() {
-        saveTask?.cancel()
-        let snapshot = (budgets, transactions)
-        saveTask = Task {
-            try? await Task.sleep(for: .seconds(0.5))
-            guard !Task.isCancelled else { return }
-            persistence.save(budgets: snapshot.0, transactions: snapshot.1)
+        for key in Array(transactionsByMonth.keys) {
+            transactionsByMonth[key]?.removeAll { $0.budgetID == budget.id }
+        }
+        for key in Array(capsByMonth.keys) {
+            capsByMonth[key]?[budget.id] = nil
         }
     }
 }

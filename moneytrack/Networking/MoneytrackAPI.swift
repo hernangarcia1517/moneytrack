@@ -1,23 +1,17 @@
 import Foundation
 
-struct BudgetSummary: Identifiable, Hashable {
-    var id: UUID
-    var name: String
-    var group: BudgetGroup
-}
-
 struct BudgetWithCap: Identifiable, Hashable {
-    var id: UUID
-    var name: String
-    var group: BudgetGroup
+    var budget: Budget
     var cap: Decimal
+
+    var id: Budget.ID { budget.id }
 }
 
 /// `month` is "YYYY-MM", as produced by `Budget.monthKey(for:)`.
 protocol MoneytrackAPI {
     func budgets(month: String) async throws -> [BudgetWithCap]
     func createBudget(name: String, group: BudgetGroup, cap: Decimal, month: String) async throws -> BudgetWithCap
-    func updateBudget(id: UUID, name: String?, group: BudgetGroup?) async throws -> BudgetSummary
+    func updateBudget(id: UUID, name: String?, group: BudgetGroup?) async throws -> Budget
     func deleteBudget(id: UUID) async throws
     func setCap(budgetID: UUID, month: String, amount: Decimal) async throws -> Decimal
 
@@ -45,9 +39,9 @@ struct LiveMoneytrackAPI: MoneytrackAPI {
         return try dto.withCap()
     }
 
-    func updateBudget(id: UUID, name: String?, group: BudgetGroup?) async throws -> BudgetSummary {
+    func updateBudget(id: UUID, name: String?, group: BudgetGroup?) async throws -> Budget {
         let dto: BudgetDTO = try await client.send(.patch, "budgets/\(id.pathComponent)", body: UpdateBudgetBody(name: name, budgetGroup: group))
-        return dto.summary()
+        return dto.budget()
     }
 
     func deleteBudget(id: UUID) async throws {

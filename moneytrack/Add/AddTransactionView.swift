@@ -221,32 +221,6 @@ struct AddTransactionView: View {
                     .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.card))
             }
 
-            let recents = store.recentMerchants()
-            if !recents.isEmpty {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("RECENT")
-                        .font(.system(size: Theme.FontSize.s11))
-                        .tracking(0.5)
-                        .foregroundStyle(Theme.Color.textFaint)
-
-                    FlowLayout(spacing: 8) {
-                        ForEach(recents, id: \.self) { name in
-                            Button {
-                                merchant = name
-                            } label: {
-                                Text(name)
-                                    .font(.system(size: Theme.FontSize.s13))
-                                    .foregroundStyle(Theme.Color.textSecondary)
-                                    .padding(.vertical, 7)
-                                    .padding(.horizontal, 12)
-                                    .overlay(Capsule().strokeBorder(Theme.Color.border, lineWidth: 1))
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
-            }
-
             Spacer()
         }
         .padding(.horizontal, Theme.Spacing.gutter)

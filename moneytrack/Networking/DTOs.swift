@@ -96,13 +96,13 @@ nonisolated enum WireFormat {
 // MARK: - Mapping
 
 nonisolated extension BudgetDTO {
-    func summary() -> BudgetSummary {
-        BudgetSummary(id: id, name: name, group: budgetGroup)
+    func budget() -> Budget {
+        Budget(id: id, name: name, group: budgetGroup)
     }
 
     func withCap() throws -> BudgetWithCap {
         guard let cap, let amount = WireFormat.decimal(fromMoney: cap) else { throw APIError.invalidResponse }
-        return BudgetWithCap(id: id, name: name, group: budgetGroup, cap: amount)
+        return BudgetWithCap(budget: budget(), cap: amount)
     }
 }
 

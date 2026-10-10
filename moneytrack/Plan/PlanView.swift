@@ -35,26 +35,31 @@ struct PlanView: View {
             ScrollView {
                 VStack(spacing: 0) {
                     MonthHeader()
-                    headline
 
-                    FadingRule()
+                    if store.status == .loaded {
+                        headline
+
+                        FadingRule()
+                            .padding(.horizontal, Theme.Spacing.gutter)
+
+                        VStack(spacing: 0) {
+                            ForEach(BudgetGroup.allCases) { group in
+                                GroupSection(
+                                    group: group,
+                                    isExpanded: expanded.contains(group),
+                                    openBudgetID: $openBudgetID,
+                                    onToggle: { toggle(group) },
+                                    onAddBudget: { newBudgetGroup = group },
+                                    onSelectBudget: { path.append(.budget($0)) }
+                                )
+                            }
+                        }
                         .padding(.horizontal, Theme.Spacing.gutter)
 
-                    VStack(spacing: 0) {
-                        ForEach(BudgetGroup.allCases) { group in
-                            GroupSection(
-                                group: group,
-                                isExpanded: expanded.contains(group),
-                                openBudgetID: $openBudgetID,
-                                onToggle: { toggle(group) },
-                                onAddBudget: { newBudgetGroup = group },
-                                onSelectBudget: { path.append(.budget($0)) }
-                            )
-                        }
+                        footer
+                    } else {
+                        LoadStatusView()
                     }
-                    .padding(.horizontal, Theme.Spacing.gutter)
-
-                    footer
                 }
             }
             .background(Theme.Color.background)

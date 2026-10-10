@@ -85,7 +85,7 @@ struct MappingTests {
         let withCap = try JSONDecoder().decode(BudgetDTO.self, from: Data(#"{"id":"c0281640-552a-48b5-9f17-4374e0543cbc","name":"Groceries","budgetGroup":"Needs","cap":"350.00"}"#.utf8))
         let withoutCap = try JSONDecoder().decode(BudgetDTO.self, from: Data(#"{"id":"c0281640-552a-48b5-9f17-4374e0543cbc","name":"Groceries","budgetGroup":"Wants"}"#.utf8))
         #expect(try withCap.withCap().cap == 350)
-        #expect(withoutCap.summary().group == .wants)
+        #expect(withoutCap.budget().group == .wants)
         #expect(throws: APIError.self) { try withoutCap.withCap() }
     }
 

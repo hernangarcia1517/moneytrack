@@ -203,7 +203,7 @@ struct BudgetDetailView: View {
             store.deleteBudget(live)
             dismiss()
         } label: {
-            Text(deleteLabel)
+            Text("Delete budget and its transactions")
                 .font(.system(size: Theme.FontSize.s13))
                 .foregroundStyle(Theme.Color.negative)
         }
@@ -221,11 +221,6 @@ struct BudgetDetailView: View {
         guard budgetCap > 0 else { return spent > 0 ? 1 : 0 }
         let value = NSDecimalNumber(decimal: spent / budgetCap).doubleValue
         return min(max(value, 0), 1)
-    }
-
-    private var deleteLabel: String {
-        let count = store.transactionCount(for: live)
-        return count > 0 ? "Delete budget and its \(count) transaction\(count == 1 ? "" : "s")" : "Delete budget"
     }
 
     private static func dayString(_ date: Date) -> String {

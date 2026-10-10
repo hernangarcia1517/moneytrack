@@ -24,38 +24,42 @@ struct SpendingView: View {
                 VStack(spacing: 0) {
                     MonthHeader()
 
-                    VStack(alignment: .leading, spacing: 0) {
-                        chartHeadline
-                            .padding(.top, Theme.Spacing.s14)
-                            .padding(.bottom, Theme.Spacing.s18)
+                    if store.status == .loaded {
+                        VStack(alignment: .leading, spacing: 0) {
+                            chartHeadline
+                                .padding(.top, Theme.Spacing.s14)
+                                .padding(.bottom, Theme.Spacing.s18)
 
-                        DailyBars(
-                            dailyTotals: dailyTotals,
-                            elapsedDayOfMonth: min(store.elapsedDayOfMonth, daysInMonth),
-                            axisStartLabel: axisLabel(forDay: 1),
-                            axisEndLabel: axisLabel(forDay: daysInMonth),
-                            scrubbedDay: $scrubbedDay
-                        )
-                    }
-                    .padding(.horizontal, Theme.Spacing.gutter)
-                    .padding(.bottom, Theme.Spacing.s16)
-
-                    FadingRule()
-                        .padding(.horizontal, Theme.Spacing.gutter)
-
-                    if groupedByDay.isEmpty {
-                        Text("Nothing logged yet this month.")
-                            .font(.system(size: Theme.FontSize.s14))
-                            .foregroundStyle(Theme.Color.textFaint)
-                            .padding(.vertical, 60)
-                            .frame(maxWidth: .infinity)
-                    } else {
-                        VStack(spacing: 0) {
-                            ForEach(groupedByDay, id: \.date) { day in
-                                daySection(day)
-                            }
+                            DailyBars(
+                                dailyTotals: dailyTotals,
+                                elapsedDayOfMonth: min(store.elapsedDayOfMonth, daysInMonth),
+                                axisStartLabel: axisLabel(forDay: 1),
+                                axisEndLabel: axisLabel(forDay: daysInMonth),
+                                scrubbedDay: $scrubbedDay
+                            )
                         }
                         .padding(.horizontal, Theme.Spacing.gutter)
+                        .padding(.bottom, Theme.Spacing.s16)
+
+                        FadingRule()
+                            .padding(.horizontal, Theme.Spacing.gutter)
+
+                        if groupedByDay.isEmpty {
+                            Text("Nothing logged yet this month.")
+                                .font(.system(size: Theme.FontSize.s14))
+                                .foregroundStyle(Theme.Color.textFaint)
+                                .padding(.vertical, 60)
+                                .frame(maxWidth: .infinity)
+                        } else {
+                            VStack(spacing: 0) {
+                                ForEach(groupedByDay, id: \.date) { day in
+                                    daySection(day)
+                                }
+                            }
+                            .padding(.horizontal, Theme.Spacing.gutter)
+                        }
+                    } else {
+                        LoadStatusView()
                     }
                 }
             }
