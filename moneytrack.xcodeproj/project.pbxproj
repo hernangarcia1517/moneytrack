@@ -6,8 +6,19 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXContainerItemProxy section */
+		FBAE356A2F5E92000031A6FE /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = FBAE353C2F5E915E0031A6FE /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = FBAE35432F5E915E0031A6FE;
+			remoteInfo = moneytrack;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		FBAE35442F5E915E0031A6FE /* moneytrack.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = moneytrack.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		FBAE35602F5E92000031A6FE /* moneytrackTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = moneytrackTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -16,10 +27,22 @@
 			path = moneytrack;
 			sourceTree = "<group>";
 		};
+		FBAE35612F5E92000031A6FE /* moneytrackTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = moneytrackTests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		FBAE35412F5E915E0031A6FE /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FBAE35642F5E92000031A6FE /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -33,6 +56,7 @@
 			isa = PBXGroup;
 			children = (
 				FBAE35462F5E915E0031A6FE /* moneytrack */,
+				FBAE35612F5E92000031A6FE /* moneytrackTests */,
 				FBAE35452F5E915E0031A6FE /* Products */,
 			);
 			sourceTree = "<group>";
@@ -41,6 +65,7 @@
 			isa = PBXGroup;
 			children = (
 				FBAE35442F5E915E0031A6FE /* moneytrack.app */,
+				FBAE35602F5E92000031A6FE /* moneytrackTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -70,6 +95,29 @@
 			productReference = FBAE35442F5E915E0031A6FE /* moneytrack.app */;
 			productType = "com.apple.product-type.application";
 		};
+		FBAE35622F5E92000031A6FE /* moneytrackTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = FBAE35662F5E92000031A6FE /* Build configuration list for PBXNativeTarget "moneytrackTests" */;
+			buildPhases = (
+				FBAE35632F5E92000031A6FE /* Sources */,
+				FBAE35642F5E92000031A6FE /* Frameworks */,
+				FBAE35652F5E92000031A6FE /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				FBAE35692F5E92000031A6FE /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				FBAE35612F5E92000031A6FE /* moneytrackTests */,
+			);
+			name = moneytrackTests;
+			packageProductDependencies = (
+			);
+			productName = moneytrackTests;
+			productReference = FBAE35602F5E92000031A6FE /* moneytrackTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -82,6 +130,10 @@
 				TargetAttributes = {
 					FBAE35432F5E915E0031A6FE = {
 						CreatedOnToolsVersion = 26.2;
+					};
+					FBAE35622F5E92000031A6FE = {
+						CreatedOnToolsVersion = 26.2;
+						TestTargetID = FBAE35432F5E915E0031A6FE;
 					};
 				};
 			};
@@ -100,12 +152,20 @@
 			projectRoot = "";
 			targets = (
 				FBAE35432F5E915E0031A6FE /* moneytrack */,
+				FBAE35622F5E92000031A6FE /* moneytrackTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		FBAE35422F5E915E0031A6FE /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FBAE35652F5E92000031A6FE /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -122,7 +182,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		FBAE35632F5E92000031A6FE /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		FBAE35692F5E92000031A6FE /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = FBAE35432F5E915E0031A6FE /* moneytrack */;
+			targetProxy = FBAE356A2F5E92000031A6FE /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		FBAE354D2F5E915F0031A6FE /* Debug */ = {
@@ -325,6 +400,52 @@
 			};
 			name = Release;
 		};
+		FBAE35672F5E92000031A6FE /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 24KU5B7T87;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = hernang.moneytrackTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/moneytrack.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/moneytrack";
+			};
+			name = Debug;
+		};
+		FBAE35682F5E92000031A6FE /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 24KU5B7T87;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = hernang.moneytrackTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/moneytrack.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/moneytrack";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -342,6 +463,15 @@
 			buildConfigurations = (
 				FBAE35502F5E915F0031A6FE /* Debug */,
 				FBAE35512F5E915F0031A6FE /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		FBAE35662F5E92000031A6FE /* Build configuration list for PBXNativeTarget "moneytrackTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				FBAE35672F5E92000031A6FE /* Debug */,
+				FBAE35682F5E92000031A6FE /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
