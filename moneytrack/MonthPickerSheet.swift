@@ -133,6 +133,7 @@ struct MonthPickerSheet: View {
             .foregroundStyle(rowTint(isViewed: isViewed, isRealToday: isRealToday))
             .padding(.vertical, Theme.Spacing.s12 + 1)
             .padding(.horizontal, Theme.Spacing.s12)
+            .contentShape(Rectangle())
             .background(isViewed ? Theme.Color.neutral800 : .clear)
             .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.row))
         }
