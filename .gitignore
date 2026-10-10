@@ -1,3 +1,4 @@
 # AI agent files — not pushed to the remote for now, may change later.
 .claude/
 .cursor/
+.DS_Store

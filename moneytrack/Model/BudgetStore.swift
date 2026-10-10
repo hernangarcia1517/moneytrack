@@ -109,11 +109,8 @@ final class BudgetStore {
 
     // MARK: - Month
 
-    /// The real "today" — the device clock, read fresh on every access
-    /// (not cached at launch) so it stays correct if the app is left open
-    /// across midnight. Was a fixed simulated date while the app shipped
-    /// with mock data anchored to a specific month; now that there's no
-    /// seed data, "today" should be genuinely today.
+    /// The real "today": the device clock, read on every access so it stays
+    /// correct if the app is left open across midnight.
     static var referenceDate: Date {
         Date()
     }
